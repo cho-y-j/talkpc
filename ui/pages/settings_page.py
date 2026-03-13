@@ -1149,6 +1149,28 @@ class SettingsPage(ctk.CTkFrame):
         else:
             self.sj_status_label.configure(text=result["message"], text_color=T.ERROR)
 
+    def _save_sejong_env(self):
+        """세종텔레콤 설정을 .env 파일에 저장"""
+        if not self.orchestrator:
+            return
+        env_path = self.orchestrator.base_dir / ".env"
+        lines = [
+            "# 세종텔레콤 DB 연결 (알림톡/SMS 발송용)",
+            f"SEJONG_DB_HOST={self.sj_db_host.get().strip()}",
+            f"SEJONG_DB_PORT={self.sj_db_port.get().strip()}",
+            f"SEJONG_DB_NAME={self.sj_db_name.get().strip()}",
+            f"SEJONG_DB_USER={self.sj_db_user.get().strip()}",
+            f"SEJONG_DB_PASSWORD={self.sj_db_password.get().strip()}",
+            "",
+            "# 카카오 알림톡 설정",
+            f"SEJONG_SENDER_KEY={self.sj_sender_key.get().strip()}",
+            f"SEJONG_CALLBACK={self.sj_callback.get().strip()}",
+            f"SEJONG_TEMPLATE_CODE={self.sj_template_code.get().strip()}",
+            "",
+        ]
+        with open(env_path, "w", encoding="utf-8") as f:
+            f.write("\n".join(lines))
+
     def _get_sejong_config(self) -> dict:
         """UI에서 세종텔레콤 설정 읽기"""
         return {
@@ -1264,7 +1286,24 @@ class SettingsPage(ctk.CTkFrame):
             s.rest_min = ad["rest_min"]
             s.rest_max = ad["rest_max"]
             s.daily_limit = ad["daily_limit"]
-        config["sejong"] = self._get_sejong_config()
+        # 세종텔레콤: .env에 민감 정보 저장, config에는 비밀번호 제외
+        self._save_sejong_env()
+        sj = self._get_sejong_config()
+        sj_safe = {
+            "db": {
+                "host": sj["db"]["host"],
+                "port": sj["db"]["port"],
+                "name": sj["db"]["name"],
+                "user": sj["db"]["user"],
+                "password": "",  # .env에만 저장
+            },
+            "kakao": {
+                "sender_key": "",  # .env에만 저장
+                "callback": sj["kakao"]["callback"],
+                "template_code": sj["kakao"]["template_code"],
+            }
+        }
+        config["sejong"] = sj_safe
         config_path = self.orchestrator.base_dir / "config" / "default_config.json"
         config_path.parent.mkdir(parents=True, exist_ok=True)
         with open(config_path, "w", encoding="utf-8") as f:

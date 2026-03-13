@@ -1,0 +1,25 @@
+{
+  "jobs": [
+    {
+      "id": "job_20260313095607104229",
+      "scheduled_time": "2026-03-13T10:00:00",
+      "contact_ids": [
+        "이모세_20260312203041",
+        "안덕현_20260312185657"
+      ],
+      "template_content": "안녕하세요 %이름%님!",
+      "image_path": null,
+      "job_type": "manual",
+      "status": "completed",
+      "created_at": "2026-03-13T09:56:07.104264",
+      "result_summary": "2명 발송 시작"
+    }
+  ],
+  "auto_send": {
+    "enabled": false,
+    "birthday_template_id": "",
+    "anniversary_template_id": "",
+    "send_hour": 9,
+    "send_minute": 0
+  }
+}

@@ -4,11 +4,14 @@ Orchestrator (팀장) - 전체 워크플로우 오케스트레이션
 """
 
 import json
+import os
 import time
 import threading
 from pathlib import Path
 from datetime import datetime
 from typing import Callable, Optional
+
+from dotenv import load_dotenv
 
 from core.window_controller import WindowController
 from core.screen_capture import ScreenCapture
@@ -80,12 +83,39 @@ class Orchestrator:
         self._send_thread: Optional[threading.Thread] = None
 
     def _load_config(self) -> dict:
-        """설정 파일 로드"""
+        """설정 파일 로드 + .env 환경변수 병합"""
+        # .env 로드
+        env_path = self.base_dir / ".env"
+        if env_path.exists():
+            load_dotenv(env_path)
+
         config_path = self.base_dir / "config" / "default_config.json"
+        config = {}
         if config_path.exists():
             with open(config_path, "r", encoding="utf-8") as f:
-                return json.load(f)
-        return {}
+                config = json.load(f)
+
+        # .env → sejong 설정 병합 (환경변수가 있으면 우선)
+        env_sejong = {}
+        if os.getenv("SEJONG_DB_HOST"):
+            env_sejong["db"] = {
+                "host": os.getenv("SEJONG_DB_HOST", "localhost"),
+                "port": int(os.getenv("SEJONG_DB_PORT", "3306")),
+                "name": os.getenv("SEJONG_DB_NAME", "sms"),
+                "user": os.getenv("SEJONG_DB_USER", ""),
+                "password": os.getenv("SEJONG_DB_PASSWORD", ""),
+            }
+            env_sejong["kakao"] = {
+                "sender_key": os.getenv("SEJONG_SENDER_KEY", ""),
+                "callback": os.getenv("SEJONG_CALLBACK", ""),
+                "template_code": os.getenv("SEJONG_TEMPLATE_CODE", ""),
+            }
+            # .env 값으로 덮어쓰기 (config에 sejong이 없거나 비어있으면)
+            existing = config.get("sejong", {})
+            if not existing.get("db", {}).get("user"):
+                config["sejong"] = env_sejong
+
+        return config
 
     # -- 콜백 등록 --
 

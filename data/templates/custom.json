@@ -1,0 +1,36 @@
+{
+  "templates": [
+    {
+      "id": "newyear",
+      "name": "새해 인사",
+      "content": "안녕하세요 %이름%님! 새해 복 많이 받으세요. 올 한해도 건강하시고 좋은 일만 가득하시길 바랍니다.",
+      "category": "all",
+      "image_path": "",
+      "created_at": "2026-03-13T16:27:29.579444"
+    },
+    {
+      "id": "chuseok",
+      "name": "추석 인사",
+      "content": "%이름%님, 풍요로운 한가위 보내세요! 가족들과 함께 행복한 시간 되시길 바랍니다.",
+      "category": "all",
+      "image_path": "",
+      "created_at": "2026-03-13T16:27:29.579449"
+    },
+    {
+      "id": "business_greeting",
+      "name": "비즈니스 안부",
+      "content": "안녕하세요 %이름%님, %회사%의 %직급%님께 안부 전합니다. %메모%",
+      "category": "business",
+      "image_path": "",
+      "created_at": "2026-03-13T16:27:29.579451"
+    },
+    {
+      "id": "tmpl_20260313164803",
+      "name": "아침인사",
+      "content": "안녕하세요 %이름%님!\n\n오늘도 행복한 하루 되세요^^",
+      "category": "all",
+      "image_path": "/Users/jojo/이미지.jpeg",
+      "created_at": "2026-03-13T16:48:03.999503"
+    }
+  ]
+}

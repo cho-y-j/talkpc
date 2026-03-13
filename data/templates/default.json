@@ -1,0 +1,22 @@
+{
+  "templates": [
+    {
+      "id": "newyear",
+      "name": "새해 인사",
+      "category": "all",
+      "content": "안녕하세요 %이름%님! 새해 복 많이 받으세요. 올 한해도 건강하시고 좋은 일만 가득하시길 바랍니다."
+    },
+    {
+      "id": "chuseok",
+      "name": "추석 인사",
+      "category": "all",
+      "content": "%이름%님, 풍요로운 한가위 보내세요! 가족들과 함께 행복한 시간 되시길 바랍니다."
+    },
+    {
+      "id": "business_greeting",
+      "name": "비즈니스 안부",
+      "category": "business",
+      "content": "안녕하세요 %이름%님, %회사%의 %직급%님께 안부 전합니다. %메모%"
+    }
+  ]
+}
