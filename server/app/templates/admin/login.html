@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>TalkPC 관리자 로그인</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <style>
+        body { background: #212529; display: flex; align-items: center; justify-content: center; min-height: 100vh; }
+        .login-card { width: 380px; border: none; border-radius: 16px; box-shadow: 0 8px 40px rgba(0,0,0,.3); }
+    </style>
+</head>
+<body>
+    <div class="card login-card">
+        <div class="card-body p-4">
+            <h4 class="text-center mb-1 fw-bold">TalkPC</h4>
+            <p class="text-center text-muted mb-4">관리자 로그인</p>
+            <div id="error" class="alert alert-danger d-none"></div>
+            <form id="loginForm">
+                <div class="mb-3">
+                    <label class="form-label">아이디</label>
+                    <input type="text" class="form-control" id="username" required autofocus>
+                </div>
+                <div class="mb-3">
+                    <label class="form-label">비밀번호</label>
+                    <input type="password" class="form-control" id="password" required>
+                </div>
+                <button type="submit" class="btn btn-dark w-100 py-2">로그인</button>
+            </form>
+        </div>
+    </div>
+    <script>
+        document.getElementById('loginForm').onsubmit = async (e) => {
+            e.preventDefault();
+            const errEl = document.getElementById('error');
+            errEl.classList.add('d-none');
+
+            const res = await fetch('/api/auth/login', {
+                method: 'POST',
+                headers: {'Content-Type': 'application/json'},
+                body: JSON.stringify({
+                    username: document.getElementById('username').value,
+                    password: document.getElementById('password').value
+                })
+            });
+            const data = await res.json();
+
+            if (!res.ok) {
+                errEl.textContent = data.detail || '로그인 실패';
+                errEl.classList.remove('d-none');
+                return;
+            }
+            if (data.role !== 'admin') {
+                errEl.textContent = '관리자 계정이 아닙니다';
+                errEl.classList.remove('d-none');
+                return;
+            }
+            localStorage.setItem('admin_token', data.access_token);
+            localStorage.setItem('admin_info', JSON.stringify({name: data.name, username: data.username}));
+            location.href = '/web/admin/';
+        };
+    </script>
+</body>
+</html>

@@ -1,0 +1,105 @@
+{% extends "admin/base.html" %}
+{% set active = "dashboard" %}
+{% block title %}대시보드 - TalkPC 관리자{% endblock %}
+
+{% block content %}
+<h4 class="fw-bold mb-4">대시보드</h4>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="stat-label">전체 회원</div>
+                <div class="stat-value text-primary" id="totalUsers">-</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="stat-label">활성 회원</div>
+                <div class="stat-value text-success" id="activeUsers">-</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="stat-label">오늘 발송</div>
+                <div class="stat-value text-info" id="todaySends">-</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-3">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="stat-label">오늘 매출</div>
+                <div class="stat-value text-warning" id="todayRevenue">-</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="stat-label">이번 달 발송</div>
+                <div class="stat-value" id="monthSends">-</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="stat-label">이번 달 매출</div>
+                <div class="stat-value" id="monthRevenue">-</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="card stat-card mt-4">
+    <div class="card-body">
+        <h6 class="fw-bold mb-3">최근 발송 로그</h6>
+        <div class="table-responsive">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr><th>시간</th><th>유저ID</th><th>수신자</th><th>유형</th><th>상태</th><th>비용</th></tr></thead>
+                <tbody id="recentLogs"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    (async () => {
+        const stats = await api('/admin/stats');
+        if (!stats) return;
+        document.getElementById('totalUsers').textContent = formatNumber(stats.total_users);
+        document.getElementById('activeUsers').textContent = formatNumber(stats.active_users);
+        document.getElementById('todaySends').textContent = formatNumber(stats.today_sends);
+        document.getElementById('todayRevenue').textContent = formatNumber(stats.today_revenue) + '원';
+        document.getElementById('monthSends').textContent = formatNumber(stats.month_sends);
+        document.getElementById('monthRevenue').textContent = formatNumber(stats.month_revenue) + '원';
+
+        const logs = await api('/admin/send-logs?size=10');
+        const tbody = document.getElementById('recentLogs');
+        if (logs && logs.length) {
+            tbody.innerHTML = logs.map(l => `
+                <tr>
+                    <td>${formatDate(l.created_at)}</td>
+                    <td>${l.user_id}</td>
+                    <td>${l.contact_name || '-'}</td>
+                    <td><span class="badge bg-secondary">${l.msg_type}</span></td>
+                    <td><span class="badge ${l.status==='queued'?'bg-info':l.status==='success'?'bg-success':'bg-danger'}">${l.status}</span></td>
+                    <td>${formatNumber(l.cost)}원</td>
+                </tr>
+            `).join('');
+        } else {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">발송 기록이 없습니다</td></tr>';
+        }
+    })();
+</script>
+{% endblock %}

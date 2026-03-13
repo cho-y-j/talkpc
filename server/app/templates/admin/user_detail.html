@@ -1,0 +1,152 @@
+{% extends "admin/base.html" %}
+{% set active = "users" %}
+{% block title %}회원상세 - TalkPC 관리자{% endblock %}
+
+{% block content %}
+<div class="d-flex align-items-center mb-4">
+    <a href="/web/admin/users" class="btn btn-outline-secondary btn-sm me-3"><i class="bi bi-arrow-left"></i></a>
+    <h4 class="fw-bold mb-0">회원 상세</h4>
+</div>
+
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3">기본 정보</h6>
+                <table class="table table-sm table-borderless mb-0">
+                    <tr><td class="text-muted">아이디</td><td id="uUsername"></td></tr>
+                    <tr><td class="text-muted">이름</td><td id="uName"></td></tr>
+                    <tr><td class="text-muted">전화번호</td><td id="uPhone"></td></tr>
+                    <tr><td class="text-muted">이메일</td><td id="uEmail"></td></tr>
+                    <tr><td class="text-muted">역할</td><td id="uRole"></td></tr>
+                    <tr><td class="text-muted">상태</td><td id="uActive"></td></tr>
+                    <tr><td class="text-muted">가입일</td><td id="uCreated"></td></tr>
+                </table>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card h-100">
+            <div class="card-body text-center">
+                <div class="stat-label mb-2">잔액</div>
+                <div class="stat-value text-primary mb-3" id="uBalance">-</div>
+                <div class="input-group input-group-sm">
+                    <input type="number" class="form-control" id="grantAmount" value="10000">
+                    <button class="btn btn-primary" onclick="grant()">충전</button>
+                    <button class="btn btn-outline-danger" onclick="deduct()">차감</button>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3">이름 / 역할 변경</h6>
+                <div class="mb-2">
+                    <input type="text" class="form-control form-control-sm" id="editName" placeholder="이름">
+                </div>
+                <div class="mb-2">
+                    <select class="form-select form-select-sm" id="editRole">
+                        <option value="user">user</option>
+                        <option value="admin">admin</option>
+                    </select>
+                </div>
+                <button class="btn btn-sm btn-dark w-100" onclick="updateUser()">저장</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <div class="col-md-6">
+        <div class="card stat-card">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3">크레딧 내역</h6>
+                <div class="table-responsive" style="max-height:400px;overflow-y:auto">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>일시</th><th>유형</th><th>금액</th><th>설명</th></tr></thead>
+                        <tbody id="creditTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-6">
+        <div class="card stat-card">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3">발송 이력</h6>
+                <div class="table-responsive" style="max-height:400px;overflow-y:auto">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>일시</th><th>수신자</th><th>유형</th><th>상태</th><th>비용</th></tr></thead>
+                        <tbody id="logTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const userId = location.pathname.split('/').pop();
+
+    async function load() {
+        const data = await api(`/admin/users/${userId}`);
+        if (!data) return;
+        const u = data.user;
+        document.getElementById('uUsername').textContent = u.username;
+        document.getElementById('uName').textContent = u.name;
+        document.getElementById('uPhone').textContent = u.phone || '-';
+        document.getElementById('uEmail').textContent = u.email || '-';
+        document.getElementById('uRole').innerHTML = `<span class="badge ${u.role==='admin'?'bg-danger':'bg-secondary'}">${u.role}</span>`;
+        document.getElementById('uActive').innerHTML = u.is_active ? '<span class="badge bg-success">활성</span>' : '<span class="badge bg-warning">차단</span>';
+        document.getElementById('uCreated').textContent = formatDate(u.created_at);
+        document.getElementById('uBalance').textContent = formatNumber(u.balance) + '원';
+        document.getElementById('editName').value = u.name;
+        document.getElementById('editRole').value = u.role;
+
+        const ct = document.getElementById('creditTable');
+        ct.innerHTML = data.credits.map(c => `
+            <tr>
+                <td>${formatDate(c.created_at)}</td>
+                <td><span class="badge ${c.type==='bonus'||c.type==='charge'?'bg-success':'bg-warning'}">${c.type}</span></td>
+                <td class="${c.amount>=0?'text-success':'text-danger'} fw-bold">${c.amount>=0?'+':''}${formatNumber(c.amount)}원</td>
+                <td>${c.description || '-'}</td>
+            </tr>
+        `).join('') || '<tr><td colspan="4" class="text-center text-muted">내역 없음</td></tr>';
+
+        const lt = document.getElementById('logTable');
+        lt.innerHTML = data.send_logs.map(l => `
+            <tr>
+                <td>${formatDate(l.created_at)}</td>
+                <td>${l.contact_name || '-'}</td>
+                <td><span class="badge bg-secondary">${l.msg_type}</span></td>
+                <td><span class="badge ${l.status==='queued'?'bg-info':l.status==='success'?'bg-success':'bg-danger'}">${l.status}</span></td>
+                <td>${formatNumber(l.cost)}원</td>
+            </tr>
+        `).join('') || '<tr><td colspan="5" class="text-center text-muted">발송 기록 없음</td></tr>';
+    }
+
+    async function grant() {
+        const amount = Math.abs(parseInt(document.getElementById('grantAmount').value));
+        const r = await api(`/admin/users/${userId}/credit`, {method:'POST', body: JSON.stringify({amount, description:'관리자 충전'})});
+        if (r) { alert(r.message); load(); }
+    }
+
+    async function deduct() {
+        const amount = -Math.abs(parseInt(document.getElementById('grantAmount').value));
+        const r = await api(`/admin/users/${userId}/credit`, {method:'POST', body: JSON.stringify({amount, description:'관리자 차감'})});
+        if (r) { alert(r.message); load(); }
+    }
+
+    async function updateUser() {
+        const name = document.getElementById('editName').value;
+        const role = document.getElementById('editRole').value;
+        const r = await api(`/admin/users/${userId}`, {method:'PUT', body: JSON.stringify({name, role})});
+        if (r) { alert(r.message); load(); }
+    }
+
+    load();
+</script>
+{% endblock %}

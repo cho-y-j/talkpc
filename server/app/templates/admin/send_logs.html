@@ -1,0 +1,66 @@
+{% extends "admin/base.html" %}
+{% set active = "logs" %}
+{% block title %}발송로그 - TalkPC 관리자{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="fw-bold mb-0">발송 로그</h4>
+    <div>
+        <button class="btn btn-sm btn-outline-secondary" onclick="prevPage()"><i class="bi bi-chevron-left"></i></button>
+        <span class="mx-2" id="pageInfo">1</span>
+        <button class="btn btn-sm btn-outline-secondary" onclick="nextPage()"><i class="bi bi-chevron-right"></i></button>
+    </div>
+</div>
+
+<div class="card stat-card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>ID</th><th>시간</th><th>유저ID</th><th>수신자</th>
+                        <th>전화번호</th><th>유형</th><th>MSEQ</th><th>상태</th><th>비용</th>
+                    </tr>
+                </thead>
+                <tbody id="logTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    let page = 1;
+    const size = 50;
+
+    async function loadLogs() {
+        const logs = await api(`/admin/send-logs?page=${page}&size=${size}`);
+        if (!logs) return;
+        document.getElementById('pageInfo').textContent = `${page} 페이지`;
+        const tbody = document.getElementById('logTable');
+        if (!logs.length) {
+            tbody.innerHTML = '<tr><td colspan="9" class="text-center text-muted py-4">발송 기록이 없습니다</td></tr>';
+            return;
+        }
+        tbody.innerHTML = logs.map(l => `
+            <tr>
+                <td>${l.id}</td>
+                <td>${formatDate(l.created_at)}</td>
+                <td>${l.user_id}</td>
+                <td>${l.contact_name || '-'}</td>
+                <td>${l.contact_phone || '-'}</td>
+                <td><span class="badge bg-secondary">${l.msg_type}</span></td>
+                <td><code>${l.mseq || '-'}</code></td>
+                <td><span class="badge ${l.status==='queued'?'bg-info':l.status==='success'?'bg-success':'bg-danger'}">${l.status}</span></td>
+                <td>${formatNumber(l.cost)}원</td>
+            </tr>
+        `).join('');
+    }
+
+    function prevPage() { if (page > 1) { page--; loadLogs(); } }
+    function nextPage() { page++; loadLogs(); }
+
+    loadLogs();
+</script>
+{% endblock %}
