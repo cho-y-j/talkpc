@@ -3,3 +3,4 @@ from app.models.credit import Credit
 from app.models.contact import Contact
 from app.models.template import Template
 from app.models.send_log import SendLog
+from app.models.device import Device, SecurityLog

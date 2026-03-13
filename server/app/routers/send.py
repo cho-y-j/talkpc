@@ -1,4 +1,4 @@
-"""발송 라우터 - SMS/알림톡 + 과금"""
+"""발송 라우터 - SMS/알림톡 + 과금 + 보안"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -9,6 +9,7 @@ from app.models.send_log import SendLog
 from app.schemas.send import SendSMSRequest, SendAlimtalkRequest, BatchSendResponse
 from app.middleware.auth import get_current_user
 from app.services import credit_service, send_service
+from app.services.security_service import check_send_limits, log_security_event
 from datetime import datetime
 
 router = APIRouter(prefix="/send", tags=["발송"])
@@ -41,6 +42,12 @@ async def send_sms(
 
     if not send_items:
         raise HTTPException(400, "전화번호가 있는 연락처가 없습니다")
+
+    # 발송 한도 체크
+    limit_check = await check_send_limits(user, len(send_items), db)
+    if not limit_check["allowed"]:
+        await db.commit()
+        raise HTTPException(403, limit_check["reason"])
 
     # 잔액 확인
     balance = await credit_service.get_balance(user.id, db)
@@ -100,6 +107,12 @@ async def send_alimtalk(
     send_items = [(c, send_service.COST_ALIMTALK) for c in contacts if c.phone]
     if not send_items:
         raise HTTPException(400, "전화번호가 있는 연락처가 없습니다")
+
+    # 발송 한도 체크
+    limit_check = await check_send_limits(user, len(send_items), db)
+    if not limit_check["allowed"]:
+        await db.commit()
+        raise HTTPException(403, limit_check["reason"])
 
     total_cost = sum(cost for _, cost in send_items)
     balance = await credit_service.get_balance(user.id, db)

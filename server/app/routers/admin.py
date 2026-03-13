@@ -1,13 +1,15 @@
-"""관리자 라우터 - 회원관리, 크레딧, 통계"""
+"""관리자 라우터 - 회원관리, 크레딧, 통계, 보안"""
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.user import User
 from app.models.send_log import SendLog
+from app.models.device import Device, SecurityLog
 from app.schemas.admin import CreditGrant, AdminUserUpdate
 from app.middleware.auth import require_admin
 from app.services import credit_service, stats_service
+from app.services.security_service import unlock_user, log_security_event
 
 router = APIRouter(prefix="/admin", tags=["관리자"])
 
@@ -22,7 +24,11 @@ async def list_users(admin: User = Depends(require_admin), db: AsyncSession = De
         user_list.append({
             "id": u.id, "username": u.username, "name": u.name,
             "phone": u.phone, "email": u.email, "role": u.role,
-            "is_active": u.is_active, "created_at": u.created_at.isoformat(),
+            "is_active": u.is_active, "is_locked": u.is_locked,
+            "locked_reason": u.locked_reason,
+            "daily_limit": u.daily_limit, "hourly_limit": u.hourly_limit,
+            "send_start_hour": u.send_start_hour, "send_end_hour": u.send_end_hour,
+            "created_at": u.created_at.isoformat(),
             "balance": balance
         })
     return user_list
@@ -45,11 +51,28 @@ async def get_user(user_id: int, admin: User = Depends(require_admin), db: Async
     )
     logs = log_result.scalars().all()
 
+    # 등록 기기
+    device_result = await db.execute(
+        select(Device).where(Device.user_id == user.id).order_by(Device.created_at.desc())
+    )
+    devices = device_result.scalars().all()
+
+    # 보안 로그
+    sec_result = await db.execute(
+        select(SecurityLog).where(SecurityLog.user_id == user.id)
+        .order_by(SecurityLog.created_at.desc()).limit(30)
+    )
+    sec_logs = sec_result.scalars().all()
+
     return {
         "user": {
             "id": user.id, "username": user.username, "name": user.name,
             "phone": user.phone, "email": user.email, "role": user.role,
-            "is_active": user.is_active, "created_at": user.created_at.isoformat(),
+            "is_active": user.is_active, "is_locked": user.is_locked,
+            "locked_reason": user.locked_reason,
+            "daily_limit": user.daily_limit, "hourly_limit": user.hourly_limit,
+            "send_start_hour": user.send_start_hour, "send_end_hour": user.send_end_hour,
+            "created_at": user.created_at.isoformat(),
             "balance": balance
         },
         "credits": [
@@ -62,7 +85,17 @@ async def get_user(user_id: int, admin: User = Depends(require_admin), db: Async
              "mseq": l.mseq, "status": l.status, "cost": l.cost,
              "created_at": l.created_at.isoformat()}
             for l in logs
-        ]
+        ],
+        "devices": [
+            {"id": d.id, "device_id": d.device_id, "device_name": d.device_name,
+             "is_approved": d.is_approved, "created_at": d.created_at.isoformat()}
+            for d in devices
+        ],
+        "security_logs": [
+            {"id": s.id, "event_type": s.event_type, "detail": s.detail,
+             "ip_address": s.ip_address, "created_at": s.created_at.isoformat()}
+            for s in sec_logs
+        ],
     }
 
 
@@ -83,6 +116,23 @@ async def update_user(
         user.role = req.role
     if req.name is not None:
         user.name = req.name
+    if req.daily_limit is not None:
+        user.daily_limit = req.daily_limit
+    if req.hourly_limit is not None:
+        user.hourly_limit = req.hourly_limit
+    if req.send_start_hour is not None:
+        user.send_start_hour = req.send_start_hour
+    if req.send_end_hour is not None:
+        user.send_end_hour = req.send_end_hour
+    if req.is_locked is not None:
+        if not req.is_locked and user.is_locked:
+            await unlock_user(user, db)
+            await log_security_event(user.id, "admin_unlock", f"관리자({admin.username})가 잠금 해제", db)
+        elif req.is_locked:
+            user.is_locked = True
+            user.locked_reason = "관리자 잠금"
+            await log_security_event(user.id, "admin_lock", f"관리자({admin.username})가 잠금", db)
+
     await db.commit()
     return {"message": "수정되었습니다"}
 
@@ -109,6 +159,73 @@ async def grant_credit(
 
     balance = await credit_service.get_balance(user_id, db)
     return {"message": f"{user.name}에게 {req.amount}원 처리 완료", "balance": balance}
+
+
+@router.post("/users/{user_id}/approve-device")
+async def approve_device(
+    user_id: int, device_id: int,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """관리자가 기기 승인"""
+    result = await db.execute(
+        select(Device).where(Device.id == device_id, Device.user_id == user_id)
+    )
+    device = result.scalar_one_or_none()
+    if not device:
+        raise HTTPException(404, "기기를 찾을 수 없습니다")
+
+    device.is_approved = True
+    await log_security_event(user_id, "admin_device_approve",
+                             f"관리자({admin.username})가 기기 승인: {device.device_name}", db)
+    await db.commit()
+    return {"message": f"기기 '{device.device_name}' 승인 완료"}
+
+
+@router.delete("/users/{user_id}/devices/{device_id}")
+async def delete_device(
+    user_id: int, device_id: int,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """관리자가 기기 삭제 (분실/탈취 대응)"""
+    result = await db.execute(
+        select(Device).where(Device.id == device_id, Device.user_id == user_id)
+    )
+    device = result.scalar_one_or_none()
+    if not device:
+        raise HTTPException(404, "기기를 찾을 수 없습니다")
+
+    device_name = device.device_name
+    await db.delete(device)
+    await log_security_event(user_id, "admin_device_delete",
+                             f"관리자({admin.username})가 기기 삭제: {device_name}", db)
+    await db.commit()
+    return {"message": f"기기 '{device_name}' 삭제 완료"}
+
+
+@router.get("/security-logs")
+async def admin_security_logs(
+    page: int = 1, size: int = 100,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """전체 보안 로그"""
+    offset = (page - 1) * size
+    result = await db.execute(
+        select(SecurityLog).order_by(SecurityLog.created_at.desc())
+        .offset(offset).limit(size)
+    )
+    logs = result.scalars().all()
+    return [
+        {
+            "id": s.id, "user_id": s.user_id,
+            "event_type": s.event_type, "detail": s.detail,
+            "ip_address": s.ip_address,
+            "created_at": s.created_at.isoformat()
+        }
+        for s in logs
+    ]
 
 
 @router.get("/stats")

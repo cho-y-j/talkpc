@@ -12,6 +12,12 @@ CREATE TABLE IF NOT EXISTS users (
     email VARCHAR(100) DEFAULT '',
     role VARCHAR(10) DEFAULT 'user',
     is_active BOOLEAN DEFAULT true,
+    daily_limit INT DEFAULT 1000,
+    hourly_limit INT DEFAULT 200,
+    send_start_hour INT DEFAULT 8,
+    send_end_hour INT DEFAULT 21,
+    is_locked BOOLEAN DEFAULT false,
+    locked_reason VARCHAR(200) DEFAULT '',
     created_at TIMESTAMP DEFAULT NOW()
 );
 
@@ -195,6 +201,34 @@ CREATE TABLE IF NOT EXISTS msg_queue_block (
     memo VARCHAR(30),
     PRIMARY KEY (dstaddr, msg_type)
 );
+
+-- ══════════════════════════════════════════════
+--  보안: 기기 등록 + 이메일 인증
+-- ══════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS devices (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users(id),
+    device_id VARCHAR(100) NOT NULL,
+    device_name VARCHAR(100) DEFAULT '',
+    is_approved BOOLEAN DEFAULT false,
+    verify_code VARCHAR(10) DEFAULT '',
+    verify_expires TIMESTAMP,
+    created_at TIMESTAMP DEFAULT NOW(),
+    UNIQUE(user_id, device_id)
+);
+CREATE INDEX IF NOT EXISTS idx_devices_user ON devices(user_id);
+
+-- 보안 이벤트 로그
+CREATE TABLE IF NOT EXISTS security_logs (
+    id SERIAL PRIMARY KEY,
+    user_id INT REFERENCES users(id),
+    event_type VARCHAR(30) NOT NULL,
+    detail VARCHAR(500) DEFAULT '',
+    ip_address VARCHAR(50) DEFAULT '',
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_security_logs_user ON security_logs(user_id, created_at);
 
 -- ══════════════════════════════════════════════
 --  기본 관리자 계정 (admin / admin1234)

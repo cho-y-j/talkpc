@@ -2,7 +2,7 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from app.database import engine
-from app.models import user, credit, contact, template, send_log
+from app.models import user, credit, contact, template, send_log, device
 from app.routers import auth, account, contacts, templates, send, usage, admin, web_admin
 
 app = FastAPI(title="TalkPC API", version="1.0.0")
