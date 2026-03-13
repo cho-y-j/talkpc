@@ -204,12 +204,40 @@ async def get_security_logs(
 # ─── 이메일 발송 ───
 
 async def send_verify_email(email: str, code: str):
-    """인증 코드 이메일 발송
-    TODO: 실제 이메일 서비스 연동 (SMTP, SES 등)
-    현재는 로그로 대체
-    """
+    """인증 코드 이메일 발송 (Gmail SMTP)"""
+    import smtplib
     import logging
+    from email.mime.text import MIMEText
+    from email.mime.multipart import MIMEMultipart
+    from app.config import SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASSWORD, SMTP_FROM_NAME
+
     logger = logging.getLogger("security")
-    logger.info(f"[이메일 인증] {email} → 코드: {code}")
-    # 실제 서비스에서는 여기에 SMTP/SES 연동
-    return True
+
+    html = f"""
+    <div style="font-family:'Apple SD Gothic Neo','맑은 고딕',sans-serif;max-width:480px;margin:0 auto;padding:30px;background:#f8f9fa;border-radius:12px;">
+        <h2 style="color:#333;margin-bottom:8px;">TalkPC 기기 인증</h2>
+        <p style="color:#666;font-size:14px;">새로운 기기에서 로그인을 시도했습니다.<br>아래 인증 코드를 입력해주세요.</p>
+        <div style="background:#fff;border:2px solid #58a6ff;border-radius:10px;padding:24px;text-align:center;margin:20px 0;">
+            <span style="font-size:36px;font-weight:700;letter-spacing:8px;color:#333;">{code}</span>
+        </div>
+        <p style="color:#999;font-size:12px;">이 코드는 10분간 유효합니다.<br>본인이 요청하지 않았다면 이 메일을 무시하세요.</p>
+    </div>
+    """
+
+    msg = MIMEMultipart("alternative")
+    msg["Subject"] = f"[TalkPC] 기기 인증 코드: {code}"
+    msg["From"] = f"{SMTP_FROM_NAME} <{SMTP_USER}>"
+    msg["To"] = email
+    msg.attach(MIMEText(f"TalkPC 기기 인증 코드: {code} (10분간 유효)", "plain", "utf-8"))
+    msg.attach(MIMEText(html, "html", "utf-8"))
+
+    try:
+        with smtplib.SMTP(SMTP_HOST, SMTP_PORT) as server:
+            server.starttls()
+            server.login(SMTP_USER, SMTP_PASSWORD)
+            server.send_message(msg)
+        logger.info(f"[이메일 발송 성공] {email}")
+        return True
+    except Exception as e:
+        logger.error(f"[이메일 발송 실패] {email}: {e}")
+        return False

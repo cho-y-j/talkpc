@@ -22,6 +22,8 @@ services:
       DATABASE_URL: postgresql+asyncpg://talkpc:talkpc1234@postgres:5432/talkpc
       JWT_SECRET: change-this-secret-in-production
       API_SECRET_KEY: tpc-k8x2m9vQfR7wLpN3jY6sT0dA4hE1cU5b
+      SMTP_USER: pcon1613@gmail.com
+      SMTP_PASSWORD: avgjldspsiykvsnm
     ports:
       - "8000:8000"
     depends_on:
