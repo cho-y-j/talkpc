@@ -30,13 +30,13 @@ async def send_sms(
     if not contacts:
         raise HTTPException(400, "발송 대상이 없습니다")
 
-    # 총 비용 계산
+    # 총 비용 계산 (DB 단가 반영)
     total_cost = 0
     send_items = []
     for c in contacts:
         if not c.phone:
             continue
-        cost, msg_type = send_service.calculate_cost(req.message, "sms")
+        cost, msg_type = await send_service.calculate_cost_from_db(req.message, "sms", db)
         total_cost += cost
         send_items.append((c, cost, msg_type))
 
@@ -104,7 +104,9 @@ async def send_alimtalk(
     if not contacts:
         raise HTTPException(400, "발송 대상이 없습니다")
 
-    send_items = [(c, send_service.COST_ALIMTALK) for c in contacts if c.phone]
+    # 알림톡 단가 (DB 반영)
+    alimtalk_cost, _ = await send_service.calculate_cost_from_db("", "alimtalk", db)
+    send_items = [(c, alimtalk_cost) for c in contacts if c.phone]
     if not send_items:
         raise HTTPException(400, "전화번호가 있는 연락처가 없습니다")
 

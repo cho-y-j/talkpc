@@ -187,3 +187,12 @@ class APIClient:
 
     def get_credit_history(self) -> list:
         return self._get("/account/credits")
+
+    def create_charge_request(self, amount: int, method: str = "bank") -> dict:
+        return self._post("/account/charge-request", {"amount": amount, "method": method})
+
+    def get_charge_requests(self) -> list:
+        return self._get("/account/charge-requests")
+
+    def get_pricing(self) -> dict:
+        return self._get("/account/pricing")

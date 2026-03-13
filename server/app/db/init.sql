@@ -231,6 +231,48 @@ CREATE TABLE IF NOT EXISTS security_logs (
 CREATE INDEX IF NOT EXISTS idx_security_logs_user ON security_logs(user_id, created_at);
 
 -- ══════════════════════════════════════════════
+--  충전 요청 (계좌 입금 → 관리자 승인)
+-- ══════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS charge_requests (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users(id),
+    amount INT NOT NULL,
+    depositor VARCHAR(50) DEFAULT '',
+    method VARCHAR(20) DEFAULT 'bank',
+    status VARCHAR(20) DEFAULT 'pending',
+    admin_id INT REFERENCES users(id),
+    admin_memo VARCHAR(200) DEFAULT '',
+    created_at TIMESTAMP DEFAULT NOW(),
+    processed_at TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_charge_requests_user ON charge_requests(user_id, created_at);
+CREATE INDEX IF NOT EXISTS idx_charge_requests_status ON charge_requests(status);
+
+-- ══════════════════════════════════════════════
+--  서버 설정 (관리자 변경 가능)
+-- ══════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS server_settings (
+    key VARCHAR(50) PRIMARY KEY,
+    value VARCHAR(200) NOT NULL,
+    description VARCHAR(200) DEFAULT '',
+    updated_at TIMESTAMP DEFAULT NOW()
+);
+
+-- 기본 과금 단가
+INSERT INTO server_settings (key, value, description) VALUES
+    ('cost_sms', '8', 'SMS 단가 (원/건)'),
+    ('cost_lms', '25', 'LMS 단가 (원/건)'),
+    ('cost_alimtalk', '7', '알림톡 단가 (원/건)'),
+    ('default_daily_limit', '1000', '기본 일일 발송 한도'),
+    ('default_hourly_limit', '200', '기본 시간당 발송 한도'),
+    ('default_send_start_hour', '8', '기본 발송 시작 시간'),
+    ('default_send_end_hour', '21', '기본 발송 종료 시간'),
+    ('bank_account', '국민은행 000-0000-0000-00 (주)톡피씨', '입금 계좌 정보')
+ON CONFLICT (key) DO NOTHING;
+
+-- ══════════════════════════════════════════════
 --  기본 관리자 계정 (admin / admin1234)
 --  bcrypt hash for 'admin1234'
 -- ══════════════════════════════════════════════

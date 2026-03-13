@@ -42,6 +42,17 @@
                 </a>
             </li>
             <li class="nav-item">
+                <a class="nav-link {% if active == 'charges' %}active{% endif %}" href="/web/admin/charge-requests">
+                    <i class="bi bi-cash-stack"></i> 충전 승인
+                    <span class="badge bg-warning text-dark ms-1" id="pendingBadge" style="display:none"></span>
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if active == 'credits' %}active{% endif %}" href="/web/admin/credits">
+                    <i class="bi bi-receipt"></i> 결제 내역
+                </a>
+            </li>
+            <li class="nav-item">
                 <a class="nav-link {% if active == 'logs' %}active{% endif %}" href="/web/admin/send-logs">
                     <i class="bi bi-send"></i> 발송로그
                 </a>
@@ -49,6 +60,11 @@
             <li class="nav-item">
                 <a class="nav-link {% if active == 'security' %}active{% endif %}" href="/web/admin/security-logs">
                     <i class="bi bi-shield-lock"></i> 보안로그
+                </a>
+            </li>
+            <li class="nav-item">
+                <a class="nav-link {% if active == 'settings' %}active{% endif %}" href="/web/admin/settings">
+                    <i class="bi bi-gear"></i> 설정
                 </a>
             </li>
         </ul>
@@ -91,6 +107,16 @@
 
         function formatNumber(n) { return (n || 0).toLocaleString(); }
         function formatDate(s) { if (!s) return '-'; const d = new Date(s); return d.toLocaleDateString('ko') + ' ' + d.toLocaleTimeString('ko', {hour:'2-digit',minute:'2-digit'}); }
+
+        // 대기중 충전 요청 배지
+        if (TOKEN) {
+            api('/admin/charge-requests?status=pending&size=1').then(data => {
+                if (data && data.total > 0) {
+                    const badge = document.getElementById('pendingBadge');
+                    if (badge) { badge.textContent = data.total; badge.style.display = 'inline'; }
+                }
+            }).catch(() => {});
+        }
     </script>
     {% block scripts %}{% endblock %}
 </body>

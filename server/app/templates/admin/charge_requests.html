@@ -1,0 +1,193 @@
+{% extends "admin/base.html" %}
+{% set active = "charges" %}
+{% block title %}충전 승인 - TalkPC 관리자{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="fw-bold mb-0"><i class="bi bi-cash-stack"></i> 충전 요청 관리</h4>
+    <div class="d-flex gap-2">
+        <select class="form-select form-select-sm" id="filterStatus" style="width:140px" onchange="loadRequests()">
+            <option value="">전체</option>
+            <option value="pending" selected>대기중</option>
+            <option value="approved">승인</option>
+            <option value="rejected">거절</option>
+        </select>
+        <button class="btn btn-sm btn-outline-secondary" onclick="loadRequests()"><i class="bi bi-arrow-clockwise"></i></button>
+    </div>
+</div>
+
+<!-- 요약 -->
+<div class="row g-3 mb-4">
+    <div class="col-md-4">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="stat-label">대기 중</div>
+                <div class="stat-value text-warning" id="statPending">0</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="stat-label">오늘 승인</div>
+                <div class="stat-value text-success" id="statApproved">0</div>
+            </div>
+        </div>
+    </div>
+    <div class="col-md-4">
+        <div class="card stat-card">
+            <div class="card-body">
+                <div class="stat-label">오늘 승인 금액</div>
+                <div class="stat-value text-primary" id="statAmount">0원</div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<!-- 요청 테이블 -->
+<div class="card stat-card">
+    <div class="card-body p-0">
+        <div class="table-responsive">
+            <table class="table table-hover align-middle mb-0">
+                <thead class="table-light">
+                    <tr>
+                        <th>ID</th><th>요청일시</th><th>회원</th><th>입금자명</th>
+                        <th>금액</th><th>결제수단</th><th>상태</th><th>처리</th>
+                    </tr>
+                </thead>
+                <tbody id="reqTable"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<!-- 승인/거절 모달 -->
+<div class="modal fade" id="processModal" tabindex="-1">
+    <div class="modal-dialog">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h5 class="modal-title" id="processTitle">충전 처리</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body">
+                <p id="processDesc"></p>
+                <div class="mb-3">
+                    <label class="form-label">관리자 메모</label>
+                    <input type="text" class="form-control" id="processMemo" placeholder="선택사항">
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-secondary" data-bs-dismiss="modal">취소</button>
+                <button class="btn btn-danger d-none" id="btnReject" onclick="processRequest('reject')">거절</button>
+                <button class="btn btn-success d-none" id="btnApprove" onclick="processRequest('approve')">승인</button>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    const STATUS_BADGE = {
+        'pending': '<span class="badge bg-warning text-dark">대기중</span>',
+        'approved': '<span class="badge bg-success">승인</span>',
+        'rejected': '<span class="badge bg-danger">거절</span>',
+    };
+    const METHOD_LABEL = {'bank': '계좌이체', 'card': '카드', 'virtual': '가상계좌'};
+
+    let currentReqId = null;
+    let currentAction = null;
+
+    async function loadRequests() {
+        const status = document.getElementById('filterStatus').value;
+        let url = '/admin/charge-requests?size=100';
+        if (status) url += `&status=${status}`;
+        const data = await api(url);
+        if (!data) return;
+
+        const reqs = data.requests || [];
+
+        // 요약 계산
+        let pending = 0, approved = 0, approvedAmt = 0;
+        // 별도로 전체 통계 로드
+        const allData = await api('/admin/charge-requests?size=500');
+        if (allData) {
+            (allData.requests || []).forEach(r => {
+                if (r.status === 'pending') pending++;
+                if (r.status === 'approved') {
+                    const today = new Date().toISOString().slice(0, 10);
+                    if (r.processed_at && r.processed_at.slice(0, 10) === today) {
+                        approved++;
+                        approvedAmt += r.amount;
+                    }
+                }
+            });
+        }
+        document.getElementById('statPending').textContent = pending;
+        document.getElementById('statApproved').textContent = approved;
+        document.getElementById('statAmount').textContent = formatNumber(approvedAmt) + '원';
+
+        const tbody = document.getElementById('reqTable');
+        tbody.innerHTML = reqs.map(r => `
+            <tr>
+                <td class="text-muted">${r.id}</td>
+                <td>${formatDate(r.created_at)}</td>
+                <td>
+                    <a href="/web/admin/users/${r.user_id}" class="text-decoration-none">
+                        ${r.user_name} <small class="text-muted">(${r.username})</small>
+                    </a>
+                </td>
+                <td>${r.depositor || '-'}</td>
+                <td class="fw-bold">${formatNumber(r.amount)}원</td>
+                <td>${METHOD_LABEL[r.method] || r.method}</td>
+                <td>${STATUS_BADGE[r.status] || r.status}</td>
+                <td>
+                    ${r.status === 'pending' ? `
+                        <button class="btn btn-sm btn-success me-1" onclick="openProcess(${r.id}, 'approve', '${r.user_name}', ${r.amount})">
+                            <i class="bi bi-check-lg"></i> 승인
+                        </button>
+                        <button class="btn btn-sm btn-outline-danger" onclick="openProcess(${r.id}, 'reject', '${r.user_name}', ${r.amount})">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    ` : `<small class="text-muted">${r.admin_memo || (r.processed_at ? formatDate(r.processed_at) : '-')}</small>`}
+                </td>
+            </tr>
+        `).join('') || '<tr><td colspan="8" class="text-center text-muted py-4">충전 요청이 없습니다</td></tr>';
+    }
+
+    function openProcess(reqId, action, userName, amount) {
+        currentReqId = reqId;
+        currentAction = action;
+        document.getElementById('processMemo').value = '';
+
+        if (action === 'approve') {
+            document.getElementById('processTitle').textContent = '충전 승인';
+            document.getElementById('processDesc').innerHTML =
+                `<strong>${userName}</strong>에게 <strong class="text-success">${formatNumber(amount)}원</strong>을 충전하시겠습니까?`;
+            document.getElementById('btnApprove').classList.remove('d-none');
+            document.getElementById('btnReject').classList.add('d-none');
+        } else {
+            document.getElementById('processTitle').textContent = '충전 거절';
+            document.getElementById('processDesc').innerHTML =
+                `<strong>${userName}</strong>의 <strong>${formatNumber(amount)}원</strong> 충전 요청을 거절하시겠습니까?`;
+            document.getElementById('btnReject').classList.remove('d-none');
+            document.getElementById('btnApprove').classList.add('d-none');
+        }
+        new bootstrap.Modal(document.getElementById('processModal')).show();
+    }
+
+    async function processRequest(action) {
+        const memo = document.getElementById('processMemo').value;
+        const result = await api(`/admin/charge-requests/${currentReqId}/${action}`, {
+            method: 'POST', body: JSON.stringify({memo})
+        });
+        if (result) {
+            alert(result.message);
+            bootstrap.Modal.getInstance(document.getElementById('processModal')).hide();
+            loadRequests();
+        }
+    }
+
+    loadRequests();
+</script>
+{% endblock %}

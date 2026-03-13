@@ -1,11 +1,16 @@
-"""관리자 라우터 - 회원관리, 크레딧, 통계, 보안"""
+"""관리자 라우터 - 회원관리, 크레딧, 통계, 보안, 충전 승인, 설정"""
+from datetime import datetime
+from pydantic import BaseModel
+from typing import Optional
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.user import User
+from app.models.credit import Credit
 from app.models.send_log import SendLog
 from app.models.device import Device, SecurityLog
+from app.models.charge_request import ChargeRequest, ServerSetting
 from app.schemas.admin import CreditGrant, AdminUserUpdate
 from app.middleware.auth import require_admin
 from app.services import credit_service, stats_service
@@ -276,3 +281,207 @@ async def admin_send_logs(
         }
         for l in logs
     ]
+
+
+# ══════════════════════════════════════════════
+#  충전 요청 관리
+# ══════════════════════════════════════════════
+
+@router.get("/charge-requests")
+async def admin_charge_requests(
+    status: str = Query(None),
+    page: int = 1, size: int = 50,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """충전 요청 목록 (필터: pending/approved/rejected)"""
+    offset = (page - 1) * size
+    conditions = []
+    if status:
+        conditions.append(ChargeRequest.status == status)
+    where_clause = and_(*conditions) if conditions else True
+
+    count_result = await db.execute(
+        select(func.count(ChargeRequest.id)).where(where_clause)
+    )
+    total = count_result.scalar() or 0
+
+    result = await db.execute(
+        select(ChargeRequest, User.username, User.name)
+        .outerjoin(User, ChargeRequest.user_id == User.id)
+        .where(where_clause)
+        .order_by(ChargeRequest.created_at.desc())
+        .offset(offset).limit(size)
+    )
+    rows = result.all()
+    return {
+        "total": total,
+        "requests": [
+            {
+                "id": r.id, "user_id": r.user_id,
+                "username": username or "", "user_name": name or "",
+                "amount": r.amount, "depositor": r.depositor,
+                "method": r.method, "status": r.status,
+                "admin_memo": r.admin_memo,
+                "created_at": r.created_at.isoformat(),
+                "processed_at": r.processed_at.isoformat() if r.processed_at else None,
+            }
+            for r, username, name in rows
+        ]
+    }
+
+
+class ChargeApprove(BaseModel):
+    memo: str = ""
+
+
+@router.post("/charge-requests/{req_id}/approve")
+async def approve_charge(
+    req_id: int, body: ChargeApprove,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """충전 요청 승인 → 크레딧 충전"""
+    result = await db.execute(
+        select(ChargeRequest).where(ChargeRequest.id == req_id)
+    )
+    charge_req = result.scalar_one_or_none()
+    if not charge_req:
+        raise HTTPException(404, "충전 요청을 찾을 수 없습니다")
+    if charge_req.status != "pending":
+        raise HTTPException(400, f"이미 처리된 요청입니다 (상태: {charge_req.status})")
+
+    # 크레딧 충전
+    await credit_service.charge(
+        charge_req.user_id, charge_req.amount,
+        f"계좌입금 충전 ({charge_req.depositor})",
+        db, admin_id=admin.id, credit_type="charge"
+    )
+
+    charge_req.status = "approved"
+    charge_req.admin_id = admin.id
+    charge_req.admin_memo = body.memo
+    charge_req.processed_at = datetime.now()
+
+    await log_security_event(
+        charge_req.user_id, "charge_approved",
+        f"충전 승인: {charge_req.amount:,}원 (관리자: {admin.username})", db
+    )
+    await db.commit()
+
+    balance = await credit_service.get_balance(charge_req.user_id, db)
+    return {"message": f"{charge_req.amount:,}원 충전 승인 완료", "balance": balance}
+
+
+@router.post("/charge-requests/{req_id}/reject")
+async def reject_charge(
+    req_id: int, body: ChargeApprove,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """충전 요청 거절"""
+    result = await db.execute(
+        select(ChargeRequest).where(ChargeRequest.id == req_id)
+    )
+    charge_req = result.scalar_one_or_none()
+    if not charge_req:
+        raise HTTPException(404, "충전 요청을 찾을 수 없습니다")
+    if charge_req.status != "pending":
+        raise HTTPException(400, f"이미 처리된 요청입니다 (상태: {charge_req.status})")
+
+    charge_req.status = "rejected"
+    charge_req.admin_id = admin.id
+    charge_req.admin_memo = body.memo or "거절"
+    charge_req.processed_at = datetime.now()
+
+    await log_security_event(
+        charge_req.user_id, "charge_rejected",
+        f"충전 거절: {charge_req.amount:,}원 (관리자: {admin.username}, 사유: {body.memo})", db
+    )
+    await db.commit()
+    return {"message": "충전 요청이 거절되었습니다"}
+
+
+# ══════════════════════════════════════════════
+#  전체 결제 내역
+# ══════════════════════════════════════════════
+
+@router.get("/credits")
+async def admin_credits(
+    page: int = 1, size: int = 100,
+    credit_type: str = Query(None),
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """전체 크레딧 내역 (충전/사용/보너스)"""
+    offset = (page - 1) * size
+    conditions = []
+    if credit_type:
+        conditions.append(Credit.type == credit_type)
+    where_clause = and_(*conditions) if conditions else True
+
+    count_result = await db.execute(
+        select(func.count(Credit.id)).where(where_clause)
+    )
+    total = count_result.scalar() or 0
+
+    result = await db.execute(
+        select(Credit, User.username, User.name)
+        .outerjoin(User, Credit.user_id == User.id)
+        .where(where_clause)
+        .order_by(Credit.created_at.desc())
+        .offset(offset).limit(size)
+    )
+    rows = result.all()
+    return {
+        "total": total,
+        "credits": [
+            {
+                "id": c.id, "user_id": c.user_id,
+                "username": username or "", "user_name": name or "",
+                "amount": c.amount, "type": c.type,
+                "description": c.description,
+                "created_at": c.created_at.isoformat()
+            }
+            for c, username, name in rows
+        ]
+    }
+
+
+# ══════════════════════════════════════════════
+#  서버 설정
+# ══════════════════════════════════════════════
+
+@router.get("/settings")
+async def get_settings(
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """서버 설정 조회"""
+    result = await db.execute(select(ServerSetting))
+    settings = result.scalars().all()
+    return {s.key: {"value": s.value, "description": s.description} for s in settings}
+
+
+class SettingsUpdate(BaseModel):
+    settings: dict
+
+
+@router.put("/settings")
+async def update_settings(
+    body: SettingsUpdate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """서버 설정 업데이트"""
+    for key, value in body.settings.items():
+        result = await db.execute(
+            select(ServerSetting).where(ServerSetting.key == key)
+        )
+        setting = result.scalar_one_or_none()
+        if setting:
+            setting.value = str(value)
+            setting.updated_at = datetime.now()
+
+    await db.commit()
+    return {"message": "설정이 저장되었습니다"}

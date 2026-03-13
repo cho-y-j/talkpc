@@ -1,21 +1,43 @@
 """발송 서비스 - msg_queue INSERT + 과금"""
 import json
-from sqlalchemy import text
+from sqlalchemy import text, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import SEJONG_SENDER_KEY, SEJONG_CALLBACK, SEJONG_TEMPLATE_CODE
 from app.config import COST_SMS, COST_LMS, COST_ALIMTALK
 
 
 def calculate_cost(message: str, msg_type: str) -> tuple[int, str]:
-    """메시지 비용 계산. returns (cost, actual_msg_type)"""
+    """메시지 비용 계산 (기본값). returns (cost, actual_msg_type)"""
     if msg_type == "alimtalk":
         return COST_ALIMTALK, "alimtalk"
-    # SMS/LMS 자동 판별
     byte_len = len(message.encode("euc-kr", errors="replace"))
     if byte_len <= 90:
         return COST_SMS, "sms"
     else:
         return COST_LMS, "lms"
+
+
+async def calculate_cost_from_db(message: str, msg_type: str, db: AsyncSession) -> tuple[int, str]:
+    """DB 설정 기반 비용 계산 (관리자 변경 반영)"""
+    from app.models.charge_request import ServerSetting
+    result = await db.execute(
+        select(ServerSetting).where(
+            ServerSetting.key.in_(['cost_sms', 'cost_lms', 'cost_alimtalk'])
+        )
+    )
+    settings = {s.key: int(s.value) for s in result.scalars().all()}
+
+    cost_sms = settings.get('cost_sms', COST_SMS)
+    cost_lms = settings.get('cost_lms', COST_LMS)
+    cost_alimtalk = settings.get('cost_alimtalk', COST_ALIMTALK)
+
+    if msg_type == "alimtalk":
+        return cost_alimtalk, "alimtalk"
+    byte_len = len(message.encode("euc-kr", errors="replace"))
+    if byte_len <= 90:
+        return cost_sms, "sms"
+    else:
+        return cost_lms, "lms"
 
 
 async def insert_msg_queue_sms(

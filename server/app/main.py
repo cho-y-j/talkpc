@@ -3,7 +3,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.database import engine
-from app.models import user, credit, contact, template, send_log, device
+from app.models import user, credit, contact, template, send_log, device, charge_request
 from app.routers import auth, account, contacts, templates, send, usage, admin, web_admin
 from app.config import API_SECRET_KEY
 

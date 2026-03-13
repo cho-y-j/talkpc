@@ -184,7 +184,7 @@ class ChargePage(ctk.CTkFrame):
         )
         self.pay_status.pack()
 
-        # ── 충전 내역 ──
+        # ── 충전 요청 내역 ──
         history_card = ctk.CTkFrame(content, fg_color=T.BG_CARD,
                                      corner_radius=10, border_width=1,
                                      border_color=T.BORDER)
@@ -193,7 +193,7 @@ class ChargePage(ctk.CTkFrame):
         history_card.grid_columnconfigure(0, weight=1)
         history_card.grid_rowconfigure(1, weight=1)
 
-        ctk.CTkLabel(history_card, text="충전 내역",
+        ctk.CTkLabel(history_card, text="충전 요청 내역",
                      font=(T.get_font_family(), 13, "bold"),
                      text_color=T.TEXT_PRIMARY).grid(
             row=0, column=0, sticky="w", padx=16, pady=(12, 0))
@@ -230,24 +230,54 @@ class ChargePage(ctk.CTkFrame):
         )
 
     def _on_pay(self):
-        """결제 버튼 클릭 (추후 결제 API 연동)"""
-        if not self.selected_amount:
+        """충전 요청 (입금 후 관리자 승인)"""
+        if not self.selected_amount or not self.api_client:
             return
 
         amount = self.selected_amount
         method = self.pay_method.get()
-        method_name = {"card": "카드", "bank": "계좌이체", "virtual": "가상계좌"}.get(method, method)
 
-        # TODO: 결제 API 호출
-        # result = self.api_client.request_payment(amount, method)
+        if method in ("card", "virtual"):
+            self.pay_status.configure(
+                text=f"카드/가상계좌 결제는 준비 중입니다. 계좌이체를 이용해주세요.",
+                text_color=T.WARNING
+            )
+            return
 
-        self.pay_status.configure(
-            text=f"결제 기능 준비 중입니다. 계좌 송금 후 관리자에게 문의해주세요.",
-            text_color=T.WARNING
-        )
+        try:
+            result = self.api_client.create_charge_request(amount, method)
+            msg = result.get("message", "충전 요청이 접수되었습니다.")
+            self.pay_status.configure(text=msg, text_color=T.SUCCESS)
+
+            # 버튼 초기화
+            self.selected_amount = None
+            for btn in self.amount_buttons:
+                btn.configure(fg_color=T.BG_INPUT, border_color=T.BORDER,
+                              text_color=T.TEXT_SECONDARY)
+            self.pay_btn.configure(
+                text="결제하기", fg_color=T.BG_HOVER, text_color=T.TEXT_MUTED,
+                state="disabled"
+            )
+            self.selected_label.configure(text="")
+
+            # 내역 새로고침
+            self.refresh()
+        except Exception as e:
+            self.pay_status.configure(text=f"요청 실패: {e}", text_color=T.ERROR)
+
+    STATUS_LABEL = {
+        "pending": "대기중",
+        "approved": "승인",
+        "rejected": "거절",
+    }
+    STATUS_COLOR = {
+        "pending": "#d29922",
+        "approved": "#3fb950",
+        "rejected": "#f85149",
+    }
 
     def refresh(self):
-        """잔액 + 충전 내역 새로고침"""
+        """잔액 + 충전 요청 내역 새로고침"""
         if not self.api_client or not self.api_client.is_logged_in:
             return
 
@@ -256,20 +286,28 @@ class ChargePage(ctk.CTkFrame):
             balance = self.api_client.get_balance()
             self.balance_label.configure(text=f"{balance:,}원")
 
-            # 충전 내역
+            # 계좌 정보 로드
+            try:
+                pricing = self.api_client.get_pricing()
+                bank = pricing.get("bank_account", "")
+                if bank and hasattr(self, '_bank_label'):
+                    self._bank_label.configure(text=bank)
+            except Exception:
+                pass
+
+            # 충전 요청 내역
             for w in self.history_scroll.winfo_children():
                 w.destroy()
 
-            history = self.api_client.get_credit_history()
-            charges = [h for h in history if h.get("type") in ("charge", "bonus")]
+            requests = self.api_client.get_charge_requests()
 
-            if not charges:
-                ctk.CTkLabel(self.history_scroll, text="충전 내역이 없습니다",
+            if not requests:
+                ctk.CTkLabel(self.history_scroll, text="충전 요청 내역이 없습니다",
                              font=(T.get_font_family(), 12),
                              text_color=T.TEXT_MUTED).pack(pady=20)
                 return
 
-            for i, item in enumerate(charges[:20]):
+            for i, item in enumerate(requests[:20]):
                 bg = T.BG_INPUT if i % 2 == 0 else "transparent"
                 row = ctk.CTkFrame(self.history_scroll, fg_color=bg,
                                    corner_radius=4, height=32)
@@ -283,21 +321,22 @@ class ChargePage(ctk.CTkFrame):
                              text_color=T.TEXT_SECONDARY, width=130, anchor="w"
                              ).pack(side="left", padx=(10, 0))
 
-                type_label = "충전" if item.get("type") == "charge" else "보너스"
-                type_color = T.SUCCESS if item.get("type") == "charge" else "#bc8cff"
-                ctk.CTkLabel(row, text=type_label,
-                             font=(T.get_font_family(), 10, "bold"),
-                             text_color=type_color, width=60, anchor="w"
-                             ).pack(side="left")
-
                 amount = item.get("amount", 0)
-                ctk.CTkLabel(row, text=f"+{amount:,}원",
+                ctk.CTkLabel(row, text=f"{amount:,}원",
                              font=(T.get_font_family(), 11, "bold"),
-                             text_color=T.SUCCESS, width=100, anchor="w"
+                             text_color="#58a6ff", width=100, anchor="w"
                              ).pack(side="left")
 
-                desc = item.get("description", "")
-                ctk.CTkLabel(row, text=desc,
+                status = item.get("status", "")
+                status_label = self.STATUS_LABEL.get(status, status)
+                status_color = self.STATUS_COLOR.get(status, T.TEXT_MUTED)
+                ctk.CTkLabel(row, text=status_label,
+                             font=(T.get_font_family(), 10, "bold"),
+                             text_color=status_color, width=60, anchor="w"
+                             ).pack(side="left")
+
+                memo = item.get("admin_memo", "")
+                ctk.CTkLabel(row, text=memo,
                              font=(T.get_font_family(), 10),
                              text_color=T.TEXT_MUTED, anchor="w"
                              ).pack(side="left", fill="x", expand=True)

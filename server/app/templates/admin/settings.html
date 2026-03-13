@@ -1,0 +1,181 @@
+{% extends "admin/base.html" %}
+{% set active = "settings" %}
+{% block title %}설정 - TalkPC 관리자{% endblock %}
+
+{% block content %}
+<div class="d-flex justify-content-between align-items-center mb-4">
+    <h4 class="fw-bold mb-0"><i class="bi bi-gear"></i> 서버 설정</h4>
+</div>
+
+<div class="row g-4">
+    <!-- 과금 단가 -->
+    <div class="col-md-6">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <h5 class="fw-bold mb-3"><i class="bi bi-currency-won"></i> 과금 단가</h5>
+                <p class="text-muted small">메시지 유형별 건당 단가를 설정합니다.</p>
+                <table class="table table-sm mb-3">
+                    <thead><tr><th>유형</th><th>단가 (원/건)</th><th>설명</th></tr></thead>
+                    <tbody>
+                        <tr>
+                            <td><span class="badge bg-primary">SMS</span></td>
+                            <td><input type="number" class="form-control form-control-sm" id="cost_sms" style="width:100px"></td>
+                            <td class="text-muted small">90바이트 이하</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-info">LMS</span></td>
+                            <td><input type="number" class="form-control form-control-sm" id="cost_lms" style="width:100px"></td>
+                            <td class="text-muted small">90바이트 초과 장문</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-success">알림톡</span></td>
+                            <td><input type="number" class="form-control form-control-sm" id="cost_alimtalk" style="width:100px"></td>
+                            <td class="text-muted small">카카오 알림톡</td>
+                        </tr>
+                    </tbody>
+                </table>
+                <button class="btn btn-dark btn-sm" onclick="savePricing()"><i class="bi bi-check-lg"></i> 단가 저장</button>
+                <div class="alert alert-info mt-3 small mb-0">
+                    <i class="bi bi-info-circle"></i>
+                    SMS/LMS는 메시지 바이트 길이(EUC-KR 기준 90바이트)로 자동 판별됩니다.<br>
+                    단가 변경 시 서버 재시작 없이 즉시 적용됩니다.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 발송 한도 기본값 -->
+    <div class="col-md-6">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <h5 class="fw-bold mb-3"><i class="bi bi-speedometer2"></i> 기본 발송 한도</h5>
+                <p class="text-muted small">신규 가입자에게 적용되는 기본 발송 제한입니다.</p>
+                <div class="row g-3 mb-3">
+                    <div class="col-6">
+                        <label class="form-label small">시간당 한도 (건)</label>
+                        <input type="number" class="form-control form-control-sm" id="default_hourly_limit">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">일일 한도 (건)</label>
+                        <input type="number" class="form-control form-control-sm" id="default_daily_limit">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">발송 시작 시간</label>
+                        <input type="number" class="form-control form-control-sm" id="default_send_start_hour" min="0" max="23">
+                    </div>
+                    <div class="col-6">
+                        <label class="form-label small">발송 종료 시간</label>
+                        <input type="number" class="form-control form-control-sm" id="default_send_end_hour" min="0" max="23">
+                    </div>
+                </div>
+                <button class="btn btn-dark btn-sm" onclick="saveLimits()"><i class="bi bi-check-lg"></i> 한도 저장</button>
+                <div class="alert alert-warning mt-3 small mb-0">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    한도 초과 시 계정이 자동 잠금됩니다. 개별 사용자 한도는 회원상세에서 변경 가능합니다.
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 입금 계좌 -->
+    <div class="col-md-6">
+        <div class="card stat-card">
+            <div class="card-body">
+                <h5 class="fw-bold mb-3"><i class="bi bi-bank"></i> 입금 계좌 정보</h5>
+                <p class="text-muted small">고객에게 표시되는 입금 계좌입니다.</p>
+                <div class="mb-3">
+                    <input type="text" class="form-control" id="bank_account" placeholder="은행 계좌번호 예금주">
+                </div>
+                <button class="btn btn-dark btn-sm" onclick="saveAccount()"><i class="bi bi-check-lg"></i> 저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 보안 정책 요약 -->
+    <div class="col-md-6">
+        <div class="card stat-card">
+            <div class="card-body">
+                <h5 class="fw-bold mb-3"><i class="bi bi-shield-check"></i> 보안 정책</h5>
+                <table class="table table-sm mb-0">
+                    <tbody>
+                        <tr>
+                            <td class="text-muted">API 키 인증</td>
+                            <td><span class="badge bg-success">활성</span></td>
+                            <td class="small text-muted">프로그램 내장 키 없이 접근 차단</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">기기 인증</td>
+                            <td><span class="badge bg-success">활성</span></td>
+                            <td class="small text-muted">새 기기 로그인 시 이메일 인증</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">야간 발송 차단</td>
+                            <td><span class="badge bg-success">활성</span></td>
+                            <td class="small text-muted">사용자별 발송 시간 제한</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">한도 초과 자동 잠금</td>
+                            <td><span class="badge bg-success">활성</span></td>
+                            <td class="small text-muted">시간당/일일 한도 초과 시 계정 잠금</td>
+                        </tr>
+                        <tr>
+                            <td class="text-muted">발송 비용 차감</td>
+                            <td><span class="badge bg-success">활성</span></td>
+                            <td class="small text-muted">잔액 부족 시 발송 차단 (402)</td>
+                        </tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    </div>
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+    async function loadSettings() {
+        const data = await api('/admin/settings');
+        if (!data) return;
+
+        const fields = ['cost_sms', 'cost_lms', 'cost_alimtalk',
+                         'default_daily_limit', 'default_hourly_limit',
+                         'default_send_start_hour', 'default_send_end_hour',
+                         'bank_account'];
+        fields.forEach(key => {
+            const el = document.getElementById(key);
+            if (el && data[key]) el.value = data[key].value;
+        });
+    }
+
+    async function savePricing() {
+        const settings = {
+            cost_sms: document.getElementById('cost_sms').value,
+            cost_lms: document.getElementById('cost_lms').value,
+            cost_alimtalk: document.getElementById('cost_alimtalk').value,
+        };
+        const r = await api('/admin/settings', {method: 'PUT', body: JSON.stringify({settings})});
+        if (r) alert(r.message);
+    }
+
+    async function saveLimits() {
+        const settings = {
+            default_hourly_limit: document.getElementById('default_hourly_limit').value,
+            default_daily_limit: document.getElementById('default_daily_limit').value,
+            default_send_start_hour: document.getElementById('default_send_start_hour').value,
+            default_send_end_hour: document.getElementById('default_send_end_hour').value,
+        };
+        const r = await api('/admin/settings', {method: 'PUT', body: JSON.stringify({settings})});
+        if (r) alert(r.message);
+    }
+
+    async function saveAccount() {
+        const settings = {
+            bank_account: document.getElementById('bank_account').value,
+        };
+        const r = await api('/admin/settings', {method: 'PUT', body: JSON.stringify({settings})});
+        if (r) alert(r.message);
+    }
+
+    loadSettings();
+</script>
+{% endblock %}

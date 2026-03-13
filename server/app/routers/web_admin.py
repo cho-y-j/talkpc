@@ -37,3 +37,18 @@ async def send_logs_page(request: Request):
 @router.get("/security-logs", response_class=HTMLResponse)
 async def security_logs_page(request: Request):
     return templates.TemplateResponse("admin/security_logs.html", {"request": request})
+
+
+@router.get("/charge-requests", response_class=HTMLResponse)
+async def charge_requests_page(request: Request):
+    return templates.TemplateResponse("admin/charge_requests.html", {"request": request})
+
+
+@router.get("/credits", response_class=HTMLResponse)
+async def credits_page(request: Request):
+    return templates.TemplateResponse("admin/credits.html", {"request": request})
+
+
+@router.get("/settings", response_class=HTMLResponse)
+async def settings_page(request: Request):
+    return templates.TemplateResponse("admin/settings.html", {"request": request})
