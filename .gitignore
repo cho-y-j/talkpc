@@ -1,0 +1,32 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+.venv/
+venv/
+*.egg-info/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+
+# 빌드 파일
+MessagingAgent_v1.7.1.4/
+MessagingAgent_v1.7.1.4.zip
+alimtalk_image_guide_v4.0.zip
+
+# PDF 매뉴얼
+*.pdf
+
+# 설정/데이터 (개인정보 포함)
+config/default_config.json
+config/learned_positions.json
+data/contacts.json
+data/templates/
+data/schedules.json
+
+# 로그
+logs/
