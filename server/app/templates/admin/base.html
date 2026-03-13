@@ -67,10 +67,12 @@
         }
         document.getElementById('admin-name') && (document.getElementById('admin-name').textContent = ADMIN_INFO.name || '관리자');
 
+        const API_KEY = 'tpc-k8x2m9vQfR7wLpN3jY6sT0dA4hE1cU5b';
+
         async function api(path, opts = {}) {
             const res = await fetch('/api' + path, {
                 ...opts,
-                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN, ...(opts.headers || {}) }
+                headers: { 'Content-Type': 'application/json', 'Authorization': 'Bearer ' + TOKEN, 'X-API-Key': API_KEY, ...(opts.headers || {}) }
             });
             if (res.status === 401) { logout(); return null; }
             return res.json();

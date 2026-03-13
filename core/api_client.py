@@ -6,6 +6,9 @@ from typing import Optional
 class APIClient:
     """TalkPC SaaS API 클라이언트"""
 
+    # 프로그램 내장 API 키 - 이 키 없으면 서버 접근 불가
+    _API_KEY = "tpc-k8x2m9vQfR7wLpN3jY6sT0dA4hE1cU5b"
+
     def __init__(self, server_url: str = "http://localhost:8000"):
         self.server_url = server_url.rstrip("/")
         self.token: Optional[str] = None
@@ -16,7 +19,10 @@ class APIClient:
         return self.token is not None
 
     def _headers(self) -> dict:
-        h = {"Content-Type": "application/json"}
+        h = {
+            "Content-Type": "application/json",
+            "X-API-Key": self._API_KEY,
+        }
         if self.token:
             h["Authorization"] = f"Bearer {self.token}"
         return h
@@ -108,7 +114,7 @@ class APIClient:
     def import_contacts(self, filepath: str) -> dict:
         """엑셀 파일 업로드로 연락처 일괄 등록"""
         url = self._url("/contacts/import")
-        headers = {}
+        headers = {"X-API-Key": self._API_KEY}
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
         with open(filepath, "rb") as f:
@@ -119,7 +125,7 @@ class APIClient:
     def export_contacts(self, filepath: str) -> str:
         """연락처 엑셀 다운로드"""
         url = self._url("/contacts/export")
-        headers = {}
+        headers = {"X-API-Key": self._API_KEY}
         if self.token:
             headers["Authorization"] = f"Bearer {self.token}"
         r = requests.get(url, headers=headers, timeout=30)
