@@ -253,6 +253,30 @@ psql -h localhost -p 15432 -U talkpc -d talkpc
 
 ## 6. 보안 기능
 
+### 6-0. API 키 인증 (프로그램 내장)
+
+모든 `/api` 요청에 `X-API-Key` 헤더가 필수입니다. 키가 없거나 틀리면 403 차단.
+
+- **서버**: `API_SECRET_KEY` 환경변수로 설정 (기본: `tpc-k8x2m9vQfR7wLpN3jY6sT0dA4hE1cU5b`)
+- **클라이언트 프로그램**: `core/api_client.py`에 키 내장 → 프로그램 없이는 API 호출 불가
+- **관리자 웹**: HTML 내 JS에 키 포함
+
+```bash
+# API 키 없이 호출 → 403 차단
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -d '{"username":"admin","password":"admin1234"}'
+# → {"detail": "유효하지 않은 API 키입니다"}
+
+# API 키 포함 → 정상
+curl -X POST http://localhost:8000/api/auth/login \
+  -H "Content-Type: application/json" \
+  -H "X-API-Key: tpc-k8x2m9vQfR7wLpN3jY6sT0dA4hE1cU5b" \
+  -d '{"username":"admin","password":"admin1234"}'
+```
+
+> **운영 시 변경**: 배포 전 `API_SECRET_KEY` 환경변수를 새 값으로 교체하고, 클라이언트 `_API_KEY`도 동일하게 변경 후 빌드.
+
 ### 6-1. 발송 한도 + 자동 차단
 
 사용자별로 관리자가 설정하는 발송 한도:
@@ -313,7 +337,7 @@ curl -X POST http://localhost:8000/api/auth/verify-device \
 # → {"access_token": "...", ...}
 
 # 관리자: 기기 승인
-curl -X POST http://localhost:8000/api/admin/users/2/approve-device?device_id=3 \
+curl -X POST "http://localhost:8000/api/admin/users/2/approve-device?device_id=3" \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 
 # 관리자: 기기 삭제 (분실 대응)
@@ -483,13 +507,15 @@ curl -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
   -d '{"username":"testuser","password":"test1234","device_id":"MY-PC-001","device_name":"내 PC"}'
 
-# 로그인 (기기 없이 - 기존 호환)
+# 로그인 (기기 없이 - 기존 호환) ※ 모든 /api 호출에 X-API-Key 필수
+API_KEY="tpc-k8x2m9vQfR7wLpN3jY6sT0dA4hE1cU5b"
 TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
   -H "Content-Type: application/json" \
+  -H "X-API-Key: $API_KEY" \
   -d '{"username":"admin","password":"admin1234"}' | python3 -c "import sys,json; print(json.load(sys.stdin)['access_token'])")
 
 # 내 정보
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/account/me
+curl -H "Authorization: Bearer $TOKEN" -H "X-API-Key: $API_KEY" http://localhost:8000/api/account/me
 
 # 연락처 추가
 curl -X POST http://localhost:8000/api/contacts \
@@ -510,10 +536,10 @@ curl -X POST http://localhost:8000/api/send/sms \
   -d '{"contact_ids":[1],"message":"테스트 메시지","subject":"알림"}'
 
 # 사용량 확인
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/usage/daily
+curl -H "Authorization: Bearer $TOKEN" -H "X-API-Key: $API_KEY" http://localhost:8000/api/usage/daily
 
 # 보안 로그 (관리자)
-curl -H "Authorization: Bearer $TOKEN" http://localhost:8000/api/admin/security-logs
+curl -H "Authorization: Bearer $TOKEN" -H "X-API-Key: $API_KEY" http://localhost:8000/api/admin/security-logs
 
 # 사용자 한도 설정 (관리자)
 curl -X PUT http://localhost:8000/api/admin/users/2 \
