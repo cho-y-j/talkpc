@@ -15,6 +15,8 @@ from ui.pages.settings_page import SettingsPage
 from ui.pages.login_page import LoginPage
 from ui.pages.usage_page import UsagePage
 from ui.pages.charge_page import ChargePage
+from ui.pages.alimtalk_designer_page import AlimtalkDesignerPage
+from ui.pages.rcs_designer_page import RCSDesignerPage
 
 
 class App(ctk.CTk):
@@ -135,6 +137,12 @@ class App(ctk.CTk):
         )
         self.pages["settings"] = SettingsPage(
             self.content_frame, orchestrator=self.orchestrator
+        )
+        self.pages["alimtalk_designer"] = AlimtalkDesignerPage(
+            self.content_frame, api_client=self.api_client
+        )
+        self.pages["rcs_designer"] = RCSDesignerPage(
+            self.content_frame, api_client=self.api_client
         )
 
         if self.saas_mode:

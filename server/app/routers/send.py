@@ -6,7 +6,7 @@ from app.database import get_db
 from app.models.user import User
 from app.models.contact import Contact
 from app.models.send_log import SendLog
-from app.schemas.send import SendSMSRequest, SendAlimtalkRequest, BatchSendResponse
+from app.schemas.send import SendSMSRequest, SendAlimtalkRequest, SendRCSRequest, BatchSendResponse
 from app.middleware.auth import get_current_user
 from app.services import credit_service, send_service
 from app.services.security_service import check_send_limits, log_security_event
@@ -138,6 +138,76 @@ async def send_alimtalk(
                 user_id=user.id, contact_id=contact.id,
                 contact_name=contact.name, contact_phone=contact.phone,
                 msg_type="alimtalk", message_preview=req.message[:100],
+                mseq=mseq, status="queued", cost=cost
+            )
+            db.add(log)
+
+            contact.last_sent = datetime.now()
+            contact.send_count += 1
+
+            results.append({"name": contact.name, "mseq": mseq, "status": "queued", "cost": cost})
+            success += 1
+        except Exception as e:
+            results.append({"name": contact.name, "status": "failed", "detail": str(e)})
+            failed += 1
+
+    await db.commit()
+    return BatchSendResponse(
+        total=len(send_items), success=success, failed=failed,
+        results=results, total_cost=total_cost
+    )
+
+
+@router.post("/rcs", response_model=BatchSendResponse)
+async def send_rcs(
+    req: SendRCSRequest,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """RCS 리치 메시지 발송"""
+    result = await db.execute(
+        select(Contact).where(Contact.id.in_(req.contact_ids), Contact.user_id == user.id)
+    )
+    contacts = list(result.scalars().all())
+    if not contacts:
+        raise HTTPException(400, "발송 대상이 없습니다")
+
+    has_image = bool(req.image_url or req.cards)
+    rcs_cost, rcs_type = await send_service.calculate_cost_from_db(
+        req.message, "rcs", db, has_image=has_image
+    )
+    send_items = [(c, rcs_cost) for c in contacts if c.phone]
+    if not send_items:
+        raise HTTPException(400, "전화번호가 있는 연락처가 없습니다")
+
+    limit_check = await check_send_limits(user, len(send_items), db)
+    if not limit_check["allowed"]:
+        await db.commit()
+        raise HTTPException(403, limit_check["reason"])
+
+    total_cost = sum(cost for _, cost in send_items)
+    balance = await credit_service.get_balance(user.id, db)
+    if balance < total_cost:
+        raise HTTPException(402, f"잔액 부족 (필요: {total_cost}원, 잔액: {balance}원)")
+
+    results = []
+    success = 0
+    failed = 0
+
+    for contact, cost in send_items:
+        try:
+            mseq = await send_service.insert_msg_queue_rcs(
+                db, contact.phone, req.message,
+                msg_type=req.msg_type, title=req.title,
+                image_url=req.image_url, buttons=req.buttons,
+                cards=req.cards, fallback_type=req.fallback_type
+            )
+            await credit_service.deduct(user.id, cost, f"{rcs_type} mseq={mseq}", db)
+
+            log = SendLog(
+                user_id=user.id, contact_id=contact.id,
+                contact_name=contact.name, contact_phone=contact.phone,
+                msg_type=rcs_type, message_preview=req.message[:100],
                 mseq=mseq, status="queued", cost=cost
             )
             db.add(log)

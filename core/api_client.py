@@ -166,6 +166,22 @@ class APIClient:
             data["buttons"] = buttons
         return self._post("/send/alimtalk", data)
 
+    def send_rcs(self, contact_ids: list, message: str,
+                 msg_type: str = "standalone", title: str = "",
+                 image_url: str = "", buttons: list = None,
+                 cards: list = None, fallback_type: str = "sms") -> dict:
+        data = {"contact_ids": contact_ids, "message": message,
+                "msg_type": msg_type, "fallback_type": fallback_type}
+        if title:
+            data["title"] = title
+        if image_url:
+            data["image_url"] = image_url
+        if buttons:
+            data["buttons"] = buttons
+        if cards:
+            data["cards"] = cards
+        return self._post("/send/rcs", data)
+
     def get_send_result(self, mseq: int) -> dict:
         return self._get(f"/send/result/{mseq}")
 

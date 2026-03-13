@@ -4,6 +4,7 @@ from sqlalchemy import text, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.config import SEJONG_SENDER_KEY, SEJONG_CALLBACK, SEJONG_TEMPLATE_CODE
 from app.config import COST_SMS, COST_LMS, COST_ALIMTALK
+from app.config import COST_RCS_SMS, COST_RCS_LMS, COST_RCS_MMS
 
 
 def calculate_cost(message: str, msg_type: str) -> tuple[int, str]:
@@ -17,12 +18,16 @@ def calculate_cost(message: str, msg_type: str) -> tuple[int, str]:
         return COST_LMS, "lms"
 
 
-async def calculate_cost_from_db(message: str, msg_type: str, db: AsyncSession) -> tuple[int, str]:
+async def calculate_cost_from_db(message: str, msg_type: str, db: AsyncSession,
+                                 has_image: bool = False) -> tuple[int, str]:
     """DB 설정 기반 비용 계산 (관리자 변경 반영)"""
     from app.models.charge_request import ServerSetting
     result = await db.execute(
         select(ServerSetting).where(
-            ServerSetting.key.in_(['cost_sms', 'cost_lms', 'cost_alimtalk'])
+            ServerSetting.key.in_([
+                'cost_sms', 'cost_lms', 'cost_alimtalk',
+                'cost_rcs_sms', 'cost_rcs_lms', 'cost_rcs_mms'
+            ])
         )
     )
     settings = {s.key: int(s.value) for s in result.scalars().all()}
@@ -30,9 +35,21 @@ async def calculate_cost_from_db(message: str, msg_type: str, db: AsyncSession) 
     cost_sms = settings.get('cost_sms', COST_SMS)
     cost_lms = settings.get('cost_lms', COST_LMS)
     cost_alimtalk = settings.get('cost_alimtalk', COST_ALIMTALK)
+    cost_rcs_sms = settings.get('cost_rcs_sms', COST_RCS_SMS)
+    cost_rcs_lms = settings.get('cost_rcs_lms', COST_RCS_LMS)
+    cost_rcs_mms = settings.get('cost_rcs_mms', COST_RCS_MMS)
 
     if msg_type == "alimtalk":
         return cost_alimtalk, "alimtalk"
+    elif msg_type == "rcs":
+        if has_image:
+            return cost_rcs_mms, "rcs_mms"
+        byte_len = len(message.encode("euc-kr", errors="replace"))
+        if byte_len <= 90:
+            return cost_rcs_sms, "rcs_sms"
+        else:
+            return cost_rcs_lms, "rcs_lms"
+
     byte_len = len(message.encode("euc-kr", errors="replace"))
     if byte_len <= 90:
         return cost_sms, "sms"
@@ -104,6 +121,49 @@ async def insert_msg_queue_alimtalk(
         "template_code": tmpl_code, "k_next_type": k_next_type,
         "sender_key": sender_key,
         "k_attach": json.dumps(attach, ensure_ascii=False),
+    })
+
+    return result.scalar()
+
+
+async def insert_msg_queue_rcs(
+    db: AsyncSession, phone: str, message: str,
+    msg_type: str = "standalone", title: str = "",
+    image_url: str = "", buttons: list = None,
+    cards: list = None, fallback_type: str = "sms",
+    callback: str = None
+) -> int:
+    """RCS msg_queue INSERT → mseq 반환 (세종텔레콤 RCS 승인 후 활성화)"""
+    cb = callback or SEJONG_CALLBACK
+
+    # RCS 메시지 구성
+    rcs_body = {"messageType": msg_type}
+    if title:
+        rcs_body["title"] = title
+    if image_url:
+        rcs_body["media"] = image_url
+    if buttons:
+        rcs_body["suggestions"] = buttons
+    if cards:
+        rcs_body["cards"] = cards
+
+    next_type_map = {"none": 0, "sms": 7, "lms": 8}
+    rcs_next_type = next_type_map.get(fallback_type, 7)
+
+    # msg_type='10' for RCS (세종텔레콤 규격 - 승인 후 확정)
+    result = await db.execute(text("""
+        INSERT INTO msg_queue (
+            msg_type, dstaddr, callback, subject, text, text2,
+            request_time, k_next_type, k_attach
+        ) VALUES (
+            '10', :phone, :callback, :subject, :message, :message,
+            NOW(), :k_next_type, :k_attach
+        )
+        RETURNING mseq
+    """), {
+        "phone": phone, "callback": cb, "subject": title or "RCS",
+        "message": message, "k_next_type": rcs_next_type,
+        "k_attach": json.dumps(rcs_body, ensure_ascii=False),
     })
 
     return result.scalar()

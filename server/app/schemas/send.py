@@ -16,6 +16,17 @@ class SendAlimtalkRequest(BaseModel):
     fallback_type: str = "sms"
 
 
+class SendRCSRequest(BaseModel):
+    contact_ids: List[int]
+    message: str
+    msg_type: str = "standalone"  # standalone, card, carousel
+    title: str = ""
+    image_url: str = ""
+    buttons: Optional[List[Dict]] = None
+    cards: Optional[List[Dict]] = None
+    fallback_type: str = "sms"
+
+
 class SendResultResponse(BaseModel):
     mseq: int
     status: str

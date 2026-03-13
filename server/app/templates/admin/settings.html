@@ -32,6 +32,21 @@
                             <td><input type="number" class="form-control form-control-sm" id="cost_alimtalk" style="width:100px"></td>
                             <td class="text-muted small">카카오 알림톡</td>
                         </tr>
+                        <tr>
+                            <td><span class="badge bg-info">RCS SMS</span></td>
+                            <td><input type="number" class="form-control form-control-sm" id="cost_rcs_sms" style="width:100px"></td>
+                            <td class="text-muted small">RCS 단문 (90바이트 이하)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-info">RCS LMS</span></td>
+                            <td><input type="number" class="form-control form-control-sm" id="cost_rcs_lms" style="width:100px"></td>
+                            <td class="text-muted small">RCS 장문 (90바이트 초과)</td>
+                        </tr>
+                        <tr>
+                            <td><span class="badge bg-info">RCS MMS</span></td>
+                            <td><input type="number" class="form-control form-control-sm" id="cost_rcs_mms" style="width:100px"></td>
+                            <td class="text-muted small">RCS 이미지 포함</td>
+                        </tr>
                     </tbody>
                 </table>
                 <button class="btn btn-dark btn-sm" onclick="savePricing()"><i class="bi bi-check-lg"></i> 단가 저장</button>
@@ -138,6 +153,7 @@
         if (!data) return;
 
         const fields = ['cost_sms', 'cost_lms', 'cost_alimtalk',
+                         'cost_rcs_sms', 'cost_rcs_lms', 'cost_rcs_mms',
                          'default_daily_limit', 'default_hourly_limit',
                          'default_send_start_hour', 'default_send_end_hour',
                          'bank_account'];
@@ -152,6 +168,9 @@
             cost_sms: document.getElementById('cost_sms').value,
             cost_lms: document.getElementById('cost_lms').value,
             cost_alimtalk: document.getElementById('cost_alimtalk').value,
+            cost_rcs_sms: document.getElementById('cost_rcs_sms').value,
+            cost_rcs_lms: document.getElementById('cost_rcs_lms').value,
+            cost_rcs_mms: document.getElementById('cost_rcs_mms').value,
         };
         const r = await api('/admin/settings', {method: 'PUT', body: JSON.stringify({settings})});
         if (r) alert(r.message);

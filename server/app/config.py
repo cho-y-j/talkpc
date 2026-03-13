@@ -20,6 +20,9 @@ SEJONG_TEMPLATE_CODE = os.getenv("SEJONG_TEMPLATE_CODE", "")
 COST_SMS = int(os.getenv("COST_SMS", "8"))
 COST_LMS = int(os.getenv("COST_LMS", "25"))
 COST_ALIMTALK = int(os.getenv("COST_ALIMTALK", "7"))
+COST_RCS_SMS = int(os.getenv("COST_RCS_SMS", "12"))
+COST_RCS_LMS = int(os.getenv("COST_RCS_LMS", "30"))
+COST_RCS_MMS = int(os.getenv("COST_RCS_MMS", "50"))
 
 # API 키 - 프로그램에 내장, 이 키 없으면 API 호출 차단
 API_SECRET_KEY = os.getenv("API_SECRET_KEY", "tpc-k8x2m9vQfR7wLpN3jY6sT0dA4hE1cU5b")
