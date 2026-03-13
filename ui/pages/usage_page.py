@@ -6,6 +6,24 @@ from ui.theme import AppTheme as T
 class UsagePage(ctk.CTkFrame):
     """사용량 + 잔액 확인 페이지"""
 
+    MSG_TYPE_LABEL = {
+        "sms": "SMS",
+        "lms": "LMS",
+        "alimtalk": "알림톡",
+    }
+
+    MSG_TYPE_COLOR = {
+        "sms": "#58a6ff",
+        "lms": "#bc8cff",
+        "alimtalk": "#3fb950",
+    }
+
+    STATUS_LABEL = {
+        "queued": "발송대기",
+        "success": "성공",
+        "failed": "실패",
+    }
+
     def __init__(self, parent, api_client=None, **kwargs):
         super().__init__(parent, **kwargs)
         self.configure(fg_color=T.BG_DARK)
@@ -17,72 +35,101 @@ class UsagePage(ctk.CTkFrame):
         self.grid_rowconfigure(1, weight=1)
 
         # 헤더
-        header = ctk.CTkFrame(self, fg_color="transparent", height=50)
-        header.grid(row=0, column=0, sticky="ew", padx=20, pady=(15, 5))
+        header = ctk.CTkFrame(self, fg_color="transparent", height=40)
+        header.grid(row=0, column=0, sticky="ew", padx=24, pady=(16, 8))
+        header.pack_propagate(False)
         ctk.CTkLabel(header, text="사용량 / 잔액",
-                     font=(T.get_font_family(), 18, "bold"),
+                     font=(T.get_font_family(), 16, "bold"),
                      text_color=T.TEXT_PRIMARY).pack(side="left")
-        ctk.CTkButton(header, text="새로고침", width=80, height=32,
-                      fg_color=T.ACCENT, hover_color=T.ACCENT_HOVER,
+        ctk.CTkButton(header, text="새로고침", width=80, height=30,
+                      font=(T.get_font_family(), 11),
+                      fg_color=T.BG_HOVER, hover_color=T.BORDER,
+                      text_color=T.TEXT_PRIMARY, corner_radius=6,
                       command=self.refresh).pack(side="right")
 
         # 메인 콘텐츠
-        content = ctk.CTkScrollableFrame(self, fg_color="transparent")
-        content.grid(row=1, column=0, sticky="nsew", padx=20, pady=10)
-        content.grid_columnconfigure((0, 1, 2), weight=1)
+        content = ctk.CTkFrame(self, fg_color="transparent")
+        content.grid(row=1, column=0, sticky="nsew", padx=24, pady=(0, 16))
+        content.grid_columnconfigure(0, weight=1)
+        content.grid_rowconfigure(1, weight=1)  # 발송 이력이 공간 차지
 
-        # 잔액 카드
-        balance_card = ctk.CTkFrame(content, fg_color=T.ACCENT, corner_radius=12, height=120)
-        balance_card.grid(row=0, column=0, columnspan=3, sticky="ew", pady=(0, 15))
-        balance_card.grid_propagate(False)
-        balance_card.grid_columnconfigure(0, weight=1)
-        ctk.CTkLabel(balance_card, text="현재 잔액", font=(T.get_font_family(), 12),
-                     text_color="#cccccc").grid(row=0, column=0, pady=(15, 0))
-        self.balance_label = ctk.CTkLabel(balance_card, text="- 원",
-                                          font=(T.get_font_family(), 32, "bold"),
-                                          text_color="#eeeeee")
-        self.balance_label.grid(row=1, column=0, pady=(0, 15))
+        # ── 상단: 잔액 + 통계 (한 줄) ──
+        top_frame = ctk.CTkFrame(content, fg_color="transparent")
+        top_frame.grid(row=0, column=0, sticky="ew", pady=(0, 12))
+        top_frame.grid_columnconfigure((0, 1, 2, 3), weight=1, uniform="stat")
 
-        # 오늘 사용량
-        today_card = self._make_stat_card(content, "오늘")
-        today_card.grid(row=1, column=0, sticky="nsew", padx=(0, 5), pady=5)
-        self.today_count = today_card.count_label
-        self.today_cost = today_card.cost_label
+        # 잔액
+        self.balance_card = self._make_compact_card(top_frame, "잔액", "- 원", "#58a6ff")
+        self.balance_card.grid(row=0, column=0, padx=(0, 6), sticky="ew")
 
-        # 이번 달 사용량
-        month_card = self._make_stat_card(content, "이번 달")
-        month_card.grid(row=1, column=1, sticky="nsew", padx=5, pady=5)
-        self.month_count = month_card.count_label
-        self.month_cost = month_card.cost_label
+        # 오늘
+        self.today_card = self._make_compact_card(top_frame, "오늘 발송", "- 건", "#3fb950")
+        self.today_card.grid(row=0, column=1, padx=3, sticky="ew")
 
-        # 전체 통계
-        total_card = self._make_stat_card(content, "전체")
-        total_card.grid(row=1, column=2, sticky="nsew", padx=(5, 0), pady=5)
-        self.total_count = total_card.count_label
-        self.total_cost = total_card.cost_label
+        # 이번 달
+        self.month_card = self._make_compact_card(top_frame, "이번 달", "- 건", "#bc8cff")
+        self.month_card.grid(row=0, column=2, padx=3, sticky="ew")
 
-        # 발송 이력
-        history_frame = ctk.CTkFrame(content, fg_color=T.BG_CARD, corner_radius=12)
-        history_frame.grid(row=2, column=0, columnspan=3, sticky="nsew", pady=(15, 0))
-        ctk.CTkLabel(history_frame, text="최근 발송 이력",
-                     font=(T.get_font_family(), 14, "bold"),
-                     text_color=T.TEXT_PRIMARY).pack(anchor="w", padx=15, pady=(15, 10))
+        # 전체
+        self.total_card = self._make_compact_card(top_frame, "전체", "- 건", "#d29922")
+        self.total_card.grid(row=0, column=3, padx=(6, 0), sticky="ew")
 
-        self.history_frame = ctk.CTkFrame(history_frame, fg_color="transparent")
-        self.history_frame.pack(fill="both", padx=15, pady=(0, 15))
+        # ── 하단: 발송 이력 (메인 영역) ──
+        history_card = ctk.CTkFrame(content, fg_color=T.BG_CARD,
+                                     corner_radius=10, border_width=1, border_color=T.BORDER)
+        history_card.grid(row=1, column=0, sticky="nsew")
+        history_card.grid_columnconfigure(0, weight=1)
+        history_card.grid_rowconfigure(1, weight=1)
 
-    def _make_stat_card(self, parent, title: str) -> ctk.CTkFrame:
-        card = ctk.CTkFrame(parent, fg_color=T.BG_CARD, corner_radius=12)
-        ctk.CTkLabel(card, text=title, font=(T.get_font_family(), 12),
-                     text_color=T.TEXT_MUTED).pack(pady=(15, 5))
-        card.count_label = ctk.CTkLabel(card, text="-건",
-                                        font=(T.get_font_family(), 22, "bold"),
-                                        text_color=T.TEXT_PRIMARY)
-        card.count_label.pack()
-        card.cost_label = ctk.CTkLabel(card, text="-원",
-                                       font=(T.get_font_family(), 13),
-                                       text_color=T.TEXT_SECONDARY)
-        card.cost_label.pack(pady=(0, 15))
+        # 이력 헤더
+        history_header = ctk.CTkFrame(history_card, fg_color="transparent")
+        history_header.grid(row=0, column=0, sticky="ew", padx=16, pady=(12, 0))
+        ctk.CTkLabel(history_header, text="최근 발송 이력",
+                     font=(T.get_font_family(), 13, "bold"),
+                     text_color=T.TEXT_PRIMARY).pack(side="left")
+
+        # 테이블 헤더
+        col_header = ctk.CTkFrame(history_card, fg_color="transparent", height=28)
+        col_header.grid(row=1, column=0, sticky="ew", padx=16, pady=(8, 0))
+        col_header.pack_propagate(False)
+        for text, w in [("시간", 130), ("받는사람", 90), ("발송방법", 70),
+                        ("상태", 70), ("내용", 0), ("비용", 60)]:
+            if w > 0:
+                ctk.CTkLabel(col_header, text=text, font=(T.get_font_family(), 10),
+                             text_color=T.TEXT_MUTED, width=w, anchor="w").pack(side="left")
+            else:
+                ctk.CTkLabel(col_header, text=text, font=(T.get_font_family(), 10),
+                             text_color=T.TEXT_MUTED, anchor="w").pack(side="left", fill="x", expand=True)
+
+        # 이력 리스트 (스크롤)
+        self.history_scroll = ctk.CTkScrollableFrame(
+            history_card, fg_color="transparent",
+            scrollbar_button_color=T.BG_HOVER,
+            scrollbar_button_hover_color=T.BORDER,
+        )
+        self.history_scroll.grid(row=2, column=0, sticky="nsew", padx=8, pady=(4, 12))
+        history_card.grid_rowconfigure(2, weight=1)
+
+    def _make_compact_card(self, parent, title: str, value: str, accent: str) -> ctk.CTkFrame:
+        """컴팩트한 통계 카드"""
+        card = ctk.CTkFrame(parent, fg_color=T.BG_CARD, corner_radius=10,
+                            border_width=1, border_color=T.BORDER, height=75)
+        card.pack_propagate(False)
+        card.grid_columnconfigure(0, weight=1)
+
+        ctk.CTkLabel(card, text=title, font=(T.get_font_family(), 10),
+                     text_color=T.TEXT_MUTED).pack(anchor="w", padx=14, pady=(10, 2))
+
+        card.value_label = ctk.CTkLabel(card, text=value,
+                                         font=(T.get_font_family(), 18, "bold"),
+                                         text_color=accent)
+        card.value_label.pack(anchor="w", padx=14)
+
+        card.sub_label = ctk.CTkLabel(card, text="",
+                                       font=(T.get_font_family(), 9),
+                                       text_color=T.TEXT_MUTED)
+        card.sub_label.pack(anchor="w", padx=14)
+
         return card
 
     def refresh(self):
@@ -93,56 +140,99 @@ class UsagePage(ctk.CTkFrame):
         try:
             # 오늘 사용량 + 잔액
             daily = self.api_client.get_daily_usage()
-            self.balance_label.configure(text=f"{daily.get('balance', 0):,}원")
-            self.today_count.configure(text=f"{daily.get('count', 0):,}건")
-            self.today_cost.configure(text=f"{daily.get('cost', 0):,}원")
+            balance = daily.get("balance", 0)
+            self.balance_card.value_label.configure(text=f"{balance:,}원")
+
+            today_count = daily.get("count", 0)
+            today_cost = daily.get("cost", 0)
+            self.today_card.value_label.configure(text=f"{today_count:,}건")
+            self.today_card.sub_label.configure(text=f"{today_cost:,}원")
 
             # 이번 달
             monthly = self.api_client.get_monthly_usage()
-            self.month_count.configure(text=f"{monthly.get('count', 0):,}건")
-            self.month_cost.configure(text=f"{monthly.get('cost', 0):,}원")
+            month_count = monthly.get("count", 0)
+            month_cost = monthly.get("cost", 0)
+            self.month_card.value_label.configure(text=f"{month_count:,}건")
+            self.month_card.sub_label.configure(text=f"{month_cost:,}원")
 
             # 전체 통계
             stats = self.api_client.get_usage_stats()
-            self.total_count.configure(text=f"{stats.get('total_count', 0):,}건")
-            self.total_cost.configure(text=f"{stats.get('total_cost', 0):,}원")
+            total_count = stats.get("total_count", 0)
+            total_cost = stats.get("total_cost", 0)
+            self.total_card.value_label.configure(text=f"{total_count:,}건")
+            self.total_card.sub_label.configure(text=f"{total_cost:,}원")
 
             # 최근 발송 이력
-            history = self.api_client.get_send_history(page=1, size=20)
-            for w in self.history_frame.winfo_children():
+            history = self.api_client.get_send_history(page=1, size=50)
+            for w in self.history_scroll.winfo_children():
                 w.destroy()
 
             if not history:
-                ctk.CTkLabel(self.history_frame, text="발송 기록이 없습니다",
-                             text_color=T.TEXT_MUTED).pack(pady=20)
+                ctk.CTkLabel(self.history_scroll, text="발송 기록이 없습니다",
+                             font=(T.get_font_family(), 12),
+                             text_color=T.TEXT_MUTED).pack(pady=40)
                 return
 
-            for item in history:
-                row = ctk.CTkFrame(self.history_frame, fg_color=T.BG_HOVER,
-                                   corner_radius=6, height=36)
-                row.pack(fill="x", pady=2)
+            for i, item in enumerate(history):
+                bg = T.BG_INPUT if i % 2 == 0 else "transparent"
+                row = ctk.CTkFrame(self.history_scroll, fg_color=bg,
+                                   corner_radius=4, height=34)
+                row.pack(fill="x", pady=1)
                 row.pack_propagate(False)
 
-                ctk.CTkLabel(row, text=item.get("created_at", "")[:16],
+                # 시간
+                created = item.get("created_at", "")
+                time_str = created[5:16].replace("T", " ") if len(created) >= 16 else created
+                ctk.CTkLabel(row, text=time_str,
                              font=(T.get_font_family(), 10),
-                             text_color=T.TEXT_MUTED, width=120).pack(side="left", padx=8)
+                             text_color=T.TEXT_SECONDARY, width=130, anchor="w"
+                             ).pack(side="left", padx=(10, 0))
+
+                # 받는사람
                 ctk.CTkLabel(row, text=item.get("contact_name", "-"),
                              font=(T.get_font_family(), 11),
-                             text_color=T.TEXT_PRIMARY, width=80).pack(side="left")
+                             text_color=T.TEXT_PRIMARY, width=90, anchor="w"
+                             ).pack(side="left")
 
+                # 발송방법 (한글 표시)
                 msg_type = item.get("msg_type", "")
-                type_color = T.ACCENT if msg_type == "alimtalk" else T.SUCCESS
-                ctk.CTkLabel(row, text=msg_type, font=(T.get_font_family(), 10),
-                             text_color=type_color, width=60).pack(side="left")
+                type_label = self.MSG_TYPE_LABEL.get(msg_type, msg_type)
+                type_color = self.MSG_TYPE_COLOR.get(msg_type, T.TEXT_SECONDARY)
+                ctk.CTkLabel(row, text=type_label,
+                             font=(T.get_font_family(), 10, "bold"),
+                             text_color=type_color, width=70, anchor="w"
+                             ).pack(side="left")
 
+                # 상태
                 status = item.get("status", "")
-                status_color = T.SUCCESS if status == "queued" else T.ERROR
-                ctk.CTkLabel(row, text=status, font=(T.get_font_family(), 10),
-                             text_color=status_color, width=60).pack(side="left")
-
-                ctk.CTkLabel(row, text=f"{item.get('cost', 0)}원",
+                status_label = self.STATUS_LABEL.get(status, status)
+                if status == "queued":
+                    status_color = T.WARNING
+                elif status == "success":
+                    status_color = T.SUCCESS
+                else:
+                    status_color = T.ERROR
+                ctk.CTkLabel(row, text=status_label,
                              font=(T.get_font_family(), 10),
-                             text_color=T.TEXT_SECONDARY).pack(side="right", padx=8)
+                             text_color=status_color, width=70, anchor="w"
+                             ).pack(side="left")
+
+                # 메시지 미리보기
+                preview = item.get("message_preview", "")
+                if preview:
+                    ctk.CTkLabel(row, text=preview[:30],
+                                 font=(T.get_font_family(), 10),
+                                 text_color=T.TEXT_MUTED, anchor="w"
+                                 ).pack(side="left", fill="x", expand=True)
+                else:
+                    ctk.CTkFrame(row, fg_color="transparent").pack(side="left", fill="x", expand=True)
+
+                # 비용
+                cost = item.get("cost", 0)
+                ctk.CTkLabel(row, text=f"{cost}원",
+                             font=(T.get_font_family(), 10),
+                             text_color=T.TEXT_SECONDARY, width=60, anchor="e"
+                             ).pack(side="right", padx=(0, 10))
 
         except Exception as e:
-            self.balance_label.configure(text="연결 오류")
+            self.balance_card.value_label.configure(text="연결 오류")
