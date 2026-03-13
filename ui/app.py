@@ -14,6 +14,7 @@ from ui.pages.send_page import SendPage
 from ui.pages.settings_page import SettingsPage
 from ui.pages.login_page import LoginPage
 from ui.pages.usage_page import UsagePage
+from ui.pages.charge_page import ChargePage
 
 
 class App(ctk.CTk):
@@ -140,6 +141,9 @@ class App(ctk.CTk):
             self.pages["usage"] = UsagePage(
                 self.content_frame, api_client=self.api_client
             )
+            self.pages["charge"] = ChargePage(
+                self.content_frame, api_client=self.api_client
+            )
 
         for page in self.pages.values():
             page.grid(row=0, column=0, sticky="nsew")
@@ -157,6 +161,8 @@ class App(ctk.CTk):
                 self.pages["contacts"].refresh_list()
             elif page_id == "usage" and self.saas_mode:
                 self.pages["usage"].refresh()
+            elif page_id == "charge" and self.saas_mode:
+                self.pages["charge"].refresh()
 
     def _on_orch_state(self, state):
         """오케스트레이터 상태 변경"""

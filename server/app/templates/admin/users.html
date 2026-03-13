@@ -15,7 +15,7 @@
                 <thead class="table-light">
                     <tr>
                         <th>ID</th><th>아이디</th><th>이름</th><th>전화번호</th>
-                        <th>역할</th><th>잔액</th><th>상태</th><th>가입일</th><th>관리</th>
+                        <th>역할</th><th>잔액</th><th>잠금</th><th>상태</th><th>한도</th><th>가입일</th><th>관리</th>
                     </tr>
                 </thead>
                 <tbody id="userTable"></tbody>
@@ -72,15 +72,24 @@
                 <td><span class="badge ${u.role==='admin'?'bg-danger':'bg-secondary'}">${u.role}</span></td>
                 <td class="fw-bold">${formatNumber(u.balance)}원</td>
                 <td>
+                    ${u.is_locked
+                        ? `<span class="badge bg-danger" title="${u.locked_reason || ''}"><i class="bi bi-lock-fill"></i> 잠금</span>`
+                        : `<span class="badge bg-success"><i class="bi bi-unlock"></i> 정상</span>`}
+                </td>
+                <td>
                     <div class="form-check form-switch">
                         <input class="form-check-input" type="checkbox" ${u.is_active?'checked':''} onchange="toggleActive(${u.id}, this.checked)">
                     </div>
+                </td>
+                <td>
+                    <small class="text-muted">${u.hourly_limit || 200}/h · ${u.daily_limit || 1000}/d</small>
                 </td>
                 <td>${formatDate(u.created_at)}</td>
                 <td>
                     <button class="btn btn-sm btn-outline-primary me-1" onclick="openCredit(${u.id},'${u.name}')">
                         <i class="bi bi-cash-coin"></i>
                     </button>
+                    ${u.is_locked ? `<button class="btn btn-sm btn-outline-warning me-1" onclick="unlockUser(${u.id})" title="잠금 해제"><i class="bi bi-unlock"></i></button>` : ''}
                     <a href="/web/admin/users/${u.id}" class="btn btn-sm btn-outline-secondary">
                         <i class="bi bi-eye"></i>
                     </a>
@@ -113,6 +122,14 @@
     async function toggleActive(userId, active) {
         await api(`/admin/users/${userId}`, {
             method: 'PUT', body: JSON.stringify({is_active: active})
+        });
+        loadUsers();
+    }
+
+    async function unlockUser(userId) {
+        if (!confirm('이 사용자의 잠금을 해제하시겠습니까?')) return;
+        await api(`/admin/users/${userId}`, {
+            method: 'PUT', body: JSON.stringify({is_locked: false})
         });
         loadUsers();
     }

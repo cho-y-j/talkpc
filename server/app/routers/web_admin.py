@@ -32,3 +32,8 @@ async def user_detail_page(request: Request, user_id: int):
 @router.get("/send-logs", response_class=HTMLResponse)
 async def send_logs_page(request: Request):
     return templates.TemplateResponse("admin/send_logs.html", {"request": request})
+
+
+@router.get("/security-logs", response_class=HTMLResponse)
+async def security_logs_page(request: Request):
+    return templates.TemplateResponse("admin/security_logs.html", {"request": request})

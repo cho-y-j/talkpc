@@ -182,3 +182,8 @@ class APIClient:
 
     def get_usage_stats(self) -> dict:
         return self._get("/usage/stats")
+
+    # === 크레딧 ===
+
+    def get_credit_history(self) -> list:
+        return self._get("/account/credits")

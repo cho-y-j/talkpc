@@ -1,6 +1,6 @@
 """관리자 라우터 - 회원관리, 크레딧, 통계, 보안"""
-from fastapi import APIRouter, Depends, HTTPException
-from sqlalchemy import select
+from fastapi import APIRouter, Depends, HTTPException, Query
+from sqlalchemy import select, func, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.user import User
@@ -207,25 +207,46 @@ async def delete_device(
 @router.get("/security-logs")
 async def admin_security_logs(
     page: int = 1, size: int = 100,
+    event_type: str = Query(None),
     admin: User = Depends(require_admin),
     db: AsyncSession = Depends(get_db)
 ):
-    """전체 보안 로그"""
+    """전체 보안 로그 (필터, 페이지네이션, 사용자명 포함)"""
     offset = (page - 1) * size
+    conditions = []
+    if event_type:
+        conditions.append(SecurityLog.event_type == event_type)
+
+    where_clause = and_(*conditions) if conditions else True
+
+    # 총 개수
+    count_result = await db.execute(
+        select(func.count(SecurityLog.id)).where(where_clause)
+    )
+    total = count_result.scalar() or 0
+
+    # 로그 + 사용자명 조인
     result = await db.execute(
-        select(SecurityLog).order_by(SecurityLog.created_at.desc())
+        select(SecurityLog, User.username)
+        .outerjoin(User, SecurityLog.user_id == User.id)
+        .where(where_clause)
+        .order_by(SecurityLog.created_at.desc())
         .offset(offset).limit(size)
     )
-    logs = result.scalars().all()
-    return [
-        {
-            "id": s.id, "user_id": s.user_id,
-            "event_type": s.event_type, "detail": s.detail,
-            "ip_address": s.ip_address,
-            "created_at": s.created_at.isoformat()
-        }
-        for s in logs
-    ]
+    rows = result.all()
+    return {
+        "total": total,
+        "logs": [
+            {
+                "id": s.id, "user_id": s.user_id,
+                "username": username or "",
+                "event_type": s.event_type, "detail": s.detail,
+                "ip_address": s.ip_address,
+                "created_at": s.created_at.isoformat()
+            }
+            for s, username in rows
+        ]
+    }
 
 
 @router.get("/stats")

@@ -73,9 +73,10 @@ class Sidebar(ctk.CTkFrame):
             ("send", "🚀  발송"),
         ]
 
-        # SaaS 모드: 사용량 메뉴 추가
+        # SaaS 모드: 사용량/충전 메뉴 추가
         if self.api_client:
             menu_items.append(("usage", "📈  사용량"))
+            menu_items.append(("charge", "💳  충전하기"))
 
         menu_items.append(("settings", "⚙️  설정"))
 

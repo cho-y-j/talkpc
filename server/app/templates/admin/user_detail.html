@@ -6,10 +6,12 @@
 <div class="d-flex align-items-center mb-4">
     <a href="/web/admin/users" class="btn btn-outline-secondary btn-sm me-3"><i class="bi bi-arrow-left"></i></a>
     <h4 class="fw-bold mb-0">회원 상세</h4>
+    <span class="ms-3 badge bg-danger d-none" id="lockBadge"><i class="bi bi-lock-fill"></i> 잠금</span>
 </div>
 
 <div class="row g-3 mb-4">
-    <div class="col-md-4">
+    <!-- 기본 정보 -->
+    <div class="col-md-3">
         <div class="card stat-card h-100">
             <div class="card-body">
                 <h6 class="fw-bold mb-3">기본 정보</h6>
@@ -25,7 +27,9 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+
+    <!-- 잔액 + 충전 -->
+    <div class="col-md-3">
         <div class="card stat-card h-100">
             <div class="card-body text-center">
                 <div class="stat-label mb-2">잔액</div>
@@ -38,31 +42,73 @@
             </div>
         </div>
     </div>
-    <div class="col-md-4">
+
+    <!-- 발송 한도 설정 -->
+    <div class="col-md-3">
         <div class="card stat-card h-100">
             <div class="card-body">
-                <h6 class="fw-bold mb-3">이름 / 역할 변경</h6>
+                <h6 class="fw-bold mb-3"><i class="bi bi-speedometer2"></i> 발송 한도</h6>
                 <div class="mb-2">
-                    <input type="text" class="form-control form-control-sm" id="editName" placeholder="이름">
+                    <label class="form-label form-label-sm mb-1">시간당 한도</label>
+                    <input type="number" class="form-control form-control-sm" id="editHourlyLimit" placeholder="200">
                 </div>
                 <div class="mb-2">
-                    <select class="form-select form-select-sm" id="editRole">
-                        <option value="user">user</option>
-                        <option value="admin">admin</option>
-                    </select>
+                    <label class="form-label form-label-sm mb-1">일일 한도</label>
+                    <input type="number" class="form-control form-control-sm" id="editDailyLimit" placeholder="1000">
                 </div>
-                <button class="btn btn-sm btn-dark w-100" onclick="updateUser()">저장</button>
+                <button class="btn btn-sm btn-dark w-100" onclick="updateLimits()">한도 저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 발송 시간 + 역할 -->
+    <div class="col-md-3">
+        <div class="card stat-card h-100">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3"><i class="bi bi-clock"></i> 발송 시간 / 역할</h6>
+                <div class="mb-2">
+                    <label class="form-label form-label-sm mb-1">발송 시작 시간</label>
+                    <input type="number" class="form-control form-control-sm" id="editStartHour" min="0" max="23" placeholder="8">
+                </div>
+                <div class="mb-2">
+                    <label class="form-label form-label-sm mb-1">발송 종료 시간</label>
+                    <input type="number" class="form-control form-control-sm" id="editEndHour" min="0" max="23" placeholder="21">
+                </div>
+                <div class="row g-2">
+                    <div class="col-6">
+                        <select class="form-select form-select-sm" id="editRole">
+                            <option value="user">user</option>
+                            <option value="admin">admin</option>
+                        </select>
+                    </div>
+                    <div class="col-6">
+                        <button class="btn btn-sm btn-dark w-100" onclick="updateSettings()">저장</button>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
 </div>
 
-<div class="row g-3">
+<!-- 잠금 제어 -->
+<div class="card stat-card mb-4 d-none" id="lockCard">
+    <div class="card-body d-flex align-items-center justify-content-between">
+        <div>
+            <i class="bi bi-lock-fill text-danger fs-5 me-2"></i>
+            <strong>계정 잠금 상태</strong>
+            <span class="text-muted ms-2" id="lockReason"></span>
+        </div>
+        <button class="btn btn-warning btn-sm" onclick="unlockUser()"><i class="bi bi-unlock"></i> 잠금 해제</button>
+    </div>
+</div>
+
+<div class="row g-3 mb-4">
+    <!-- 크레딧 내역 -->
     <div class="col-md-6">
         <div class="card stat-card">
             <div class="card-body">
                 <h6 class="fw-bold mb-3">크레딧 내역</h6>
-                <div class="table-responsive" style="max-height:400px;overflow-y:auto">
+                <div class="table-responsive" style="max-height:300px;overflow-y:auto">
                     <table class="table table-sm table-hover mb-0">
                         <thead><tr><th>일시</th><th>유형</th><th>금액</th><th>설명</th></tr></thead>
                         <tbody id="creditTable"></tbody>
@@ -71,14 +117,46 @@
             </div>
         </div>
     </div>
+    <!-- 발송 이력 -->
     <div class="col-md-6">
         <div class="card stat-card">
             <div class="card-body">
                 <h6 class="fw-bold mb-3">발송 이력</h6>
-                <div class="table-responsive" style="max-height:400px;overflow-y:auto">
+                <div class="table-responsive" style="max-height:300px;overflow-y:auto">
                     <table class="table table-sm table-hover mb-0">
                         <thead><tr><th>일시</th><th>수신자</th><th>유형</th><th>상태</th><th>비용</th></tr></thead>
                         <tbody id="logTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3">
+    <!-- 등록 기기 -->
+    <div class="col-md-6">
+        <div class="card stat-card">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3"><i class="bi bi-laptop"></i> 등록 기기</h6>
+                <div class="table-responsive" style="max-height:300px;overflow-y:auto">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>기기명</th><th>기기 ID</th><th>상태</th><th>등록일</th><th>관리</th></tr></thead>
+                        <tbody id="deviceTable"></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- 보안 로그 -->
+    <div class="col-md-6">
+        <div class="card stat-card">
+            <div class="card-body">
+                <h6 class="fw-bold mb-3"><i class="bi bi-shield-lock"></i> 보안 로그</h6>
+                <div class="table-responsive" style="max-height:300px;overflow-y:auto">
+                    <table class="table table-sm table-hover mb-0">
+                        <thead><tr><th>일시</th><th>이벤트</th><th>상세</th><th>IP</th></tr></thead>
+                        <tbody id="securityTable"></tbody>
                     </table>
                 </div>
             </div>
@@ -90,6 +168,12 @@
 {% block scripts %}
 <script>
     const userId = location.pathname.split('/').pop();
+
+    const EVENT_LABEL = {
+        'login': '로그인', 'login_fail': '로그인 실패', 'register': '회원가입',
+        'device_new': '새 기기', 'device_verify': '기기 인증', 'auto_lock': '자동 잠금',
+        'unlock': '잠금 해제', 'password_change': '비밀번호 변경'
+    };
 
     async function load() {
         const data = await api(`/admin/users/${userId}`);
@@ -103,9 +187,25 @@
         document.getElementById('uActive').innerHTML = u.is_active ? '<span class="badge bg-success">활성</span>' : '<span class="badge bg-warning">차단</span>';
         document.getElementById('uCreated').textContent = formatDate(u.created_at);
         document.getElementById('uBalance').textContent = formatNumber(u.balance) + '원';
-        document.getElementById('editName').value = u.name;
         document.getElementById('editRole').value = u.role;
 
+        // 한도 설정 폼
+        document.getElementById('editHourlyLimit').value = u.hourly_limit || 200;
+        document.getElementById('editDailyLimit').value = u.daily_limit || 1000;
+        document.getElementById('editStartHour').value = u.send_start_hour ?? 8;
+        document.getElementById('editEndHour').value = u.send_end_hour ?? 21;
+
+        // 잠금 상태
+        if (u.is_locked) {
+            document.getElementById('lockBadge').classList.remove('d-none');
+            document.getElementById('lockCard').classList.remove('d-none');
+            document.getElementById('lockReason').textContent = u.locked_reason || '';
+        } else {
+            document.getElementById('lockBadge').classList.add('d-none');
+            document.getElementById('lockCard').classList.add('d-none');
+        }
+
+        // 크레딧 내역
         const ct = document.getElementById('creditTable');
         ct.innerHTML = data.credits.map(c => `
             <tr>
@@ -116,6 +216,7 @@
             </tr>
         `).join('') || '<tr><td colspan="4" class="text-center text-muted">내역 없음</td></tr>';
 
+        // 발송 이력
         const lt = document.getElementById('logTable');
         lt.innerHTML = data.send_logs.map(l => `
             <tr>
@@ -126,6 +227,36 @@
                 <td>${formatNumber(l.cost)}원</td>
             </tr>
         `).join('') || '<tr><td colspan="5" class="text-center text-muted">발송 기록 없음</td></tr>';
+
+        // 등록 기기
+        const dt = document.getElementById('deviceTable');
+        const devices = data.devices || [];
+        dt.innerHTML = devices.map(d => `
+            <tr>
+                <td>${d.device_name || '-'}</td>
+                <td><code class="small">${(d.device_id || '').substring(0, 12)}...</code></td>
+                <td>${d.is_approved
+                    ? '<span class="badge bg-success">승인</span>'
+                    : '<span class="badge bg-warning">대기</span>'}</td>
+                <td>${formatDate(d.created_at)}</td>
+                <td>
+                    ${!d.is_approved ? `<button class="btn btn-sm btn-outline-success me-1" onclick="approveDevice(${d.id})" title="승인"><i class="bi bi-check-lg"></i></button>` : ''}
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteDevice(${d.id})" title="삭제"><i class="bi bi-trash"></i></button>
+                </td>
+            </tr>
+        `).join('') || '<tr><td colspan="5" class="text-center text-muted">등록된 기기 없음</td></tr>';
+
+        // 보안 로그
+        const st = document.getElementById('securityTable');
+        const secLogs = data.security_logs || [];
+        st.innerHTML = secLogs.map(s => `
+            <tr>
+                <td>${formatDate(s.created_at)}</td>
+                <td><span class="badge bg-dark">${EVENT_LABEL[s.event_type] || s.event_type}</span></td>
+                <td class="small">${s.detail || '-'}</td>
+                <td><code class="small">${s.ip_address || '-'}</code></td>
+            </tr>
+        `).join('') || '<tr><td colspan="4" class="text-center text-muted">보안 로그 없음</td></tr>';
     }
 
     async function grant() {
@@ -140,11 +271,36 @@
         if (r) { alert(r.message); load(); }
     }
 
-    async function updateUser() {
-        const name = document.getElementById('editName').value;
-        const role = document.getElementById('editRole').value;
-        const r = await api(`/admin/users/${userId}`, {method:'PUT', body: JSON.stringify({name, role})});
+    async function updateLimits() {
+        const hourly_limit = parseInt(document.getElementById('editHourlyLimit').value);
+        const daily_limit = parseInt(document.getElementById('editDailyLimit').value);
+        const r = await api(`/admin/users/${userId}`, {method:'PUT', body: JSON.stringify({hourly_limit, daily_limit})});
         if (r) { alert(r.message); load(); }
+    }
+
+    async function updateSettings() {
+        const role = document.getElementById('editRole').value;
+        const send_start_hour = parseInt(document.getElementById('editStartHour').value);
+        const send_end_hour = parseInt(document.getElementById('editEndHour').value);
+        const r = await api(`/admin/users/${userId}`, {method:'PUT', body: JSON.stringify({role, send_start_hour, send_end_hour})});
+        if (r) { alert(r.message); load(); }
+    }
+
+    async function unlockUser() {
+        if (!confirm('이 사용자의 잠금을 해제하시겠습니까?')) return;
+        const r = await api(`/admin/users/${userId}`, {method:'PUT', body: JSON.stringify({is_locked: false})});
+        if (r) { alert(r.message); load(); }
+    }
+
+    async function approveDevice(deviceId) {
+        const r = await api(`/admin/users/${userId}/approve-device`, {method:'POST', body: JSON.stringify({device_id: deviceId})});
+        if (r) { alert('기기가 승인되었습니다.'); load(); }
+    }
+
+    async function deleteDevice(deviceId) {
+        if (!confirm('이 기기를 삭제하시겠습니까?')) return;
+        const r = await api(`/admin/users/${userId}/devices/${deviceId}`, {method:'DELETE'});
+        if (r) { alert('기기가 삭제되었습니다.'); load(); }
     }
 
     load();

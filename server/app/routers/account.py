@@ -49,3 +49,17 @@ async def update_me(
 async def get_balance(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
     balance = await credit_service.get_balance(user.id, db)
     return {"balance": balance}
+
+
+@router.get("/credits")
+async def get_credits(user: User = Depends(get_current_user), db: AsyncSession = Depends(get_db)):
+    """내 크레딧 내역"""
+    credits = await credit_service.get_history(user.id, db)
+    return [
+        {
+            "id": c.id, "amount": c.amount, "type": c.type,
+            "description": c.description,
+            "created_at": c.created_at.isoformat()
+        }
+        for c in credits
+    ]
