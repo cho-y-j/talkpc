@@ -134,7 +134,11 @@ async def get_pricing(db: AsyncSession = Depends(get_db)):
     """현재 과금 단가 조회 (로그인 불필요하지만 API키는 필요)"""
     result = await db.execute(
         select(ServerSetting).where(
-            ServerSetting.key.in_(['cost_sms', 'cost_lms', 'cost_alimtalk', 'bank_account'])
+            ServerSetting.key.in_([
+                'cost_sms', 'cost_lms', 'cost_alimtalk',
+                'cost_rcs_sms', 'cost_rcs_lms', 'cost_rcs_mms',
+                'bank_account'
+            ])
         )
     )
     settings = {s.key: s.value for s in result.scalars().all()}
@@ -142,5 +146,8 @@ async def get_pricing(db: AsyncSession = Depends(get_db)):
         "sms": int(settings.get("cost_sms", "8")),
         "lms": int(settings.get("cost_lms", "25")),
         "alimtalk": int(settings.get("cost_alimtalk", "7")),
+        "rcs_sms": int(settings.get("cost_rcs_sms", "12")),
+        "rcs_lms": int(settings.get("cost_rcs_lms", "30")),
+        "rcs_mms": int(settings.get("cost_rcs_mms", "50")),
         "bank_account": settings.get("bank_account", ""),
     }
