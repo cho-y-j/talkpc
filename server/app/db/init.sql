@@ -74,6 +74,7 @@ CREATE TABLE IF NOT EXISTS send_logs (
     msg_type VARCHAR(10) NOT NULL,
     message_preview VARCHAR(100) DEFAULT '',
     mseq INT,
+    send_code VARCHAR(100),
     status VARCHAR(20) DEFAULT 'queued',
     cost INT NOT NULL DEFAULT 0,
     created_at TIMESTAMP DEFAULT NOW()
@@ -268,12 +269,27 @@ INSERT INTO server_settings (key, value, description) VALUES
     ('cost_rcs_sms', '12', 'RCS SMS 단가 (원/건)'),
     ('cost_rcs_lms', '30', 'RCS LMS 단가 (원/건)'),
     ('cost_rcs_mms', '50', 'RCS MMS 단가 (원/건)'),
+    ('cost_brandtalk', '15', '브랜드톡 단가 (원/건)'),
     ('default_daily_limit', '1000', '기본 일일 발송 한도'),
     ('default_hourly_limit', '200', '기본 시간당 발송 한도'),
     ('default_send_start_hour', '8', '기본 발송 시작 시간'),
     ('default_send_end_hour', '21', '기본 발송 종료 시간'),
     ('bank_account', '국민은행 000-0000-0000-00 (주)톡피씨', '입금 계좌 정보')
 ON CONFLICT (key) DO NOTHING;
+
+-- ══════════════════════════════════════════════
+--  사용자별 발신번호
+-- ══════════════════════════════════════════════
+
+CREATE TABLE IF NOT EXISTS user_callbacks (
+    id SERIAL PRIMARY KEY,
+    user_id INT NOT NULL REFERENCES users(id),
+    phone VARCHAR(20) NOT NULL,
+    is_active BOOLEAN DEFAULT false,
+    memo VARCHAR(100) DEFAULT '',
+    created_at TIMESTAMP DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_user_callbacks_user ON user_callbacks(user_id);
 
 -- ══════════════════════════════════════════════
 --  기본 관리자 계정 (admin / admin1234)

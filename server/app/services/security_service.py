@@ -9,6 +9,22 @@ from app.models.send_log import SendLog
 from app.models.device import Device, SecurityLog
 
 
+# ─── 서버 기본 발송 시간 조회 ───
+
+async def _get_default_send_hours(db: AsyncSession) -> tuple[int, int]:
+    """server_settings에서 기본 발송 시간 조회"""
+    from app.models.charge_request import ServerSetting
+    result = await db.execute(
+        select(ServerSetting).where(
+            ServerSetting.key.in_(["default_send_start_hour", "default_send_end_hour"])
+        )
+    )
+    settings = {s.key: s.value for s in result.scalars().all()}
+    start = int(settings.get("default_send_start_hour", "8"))
+    end = int(settings.get("default_send_end_hour", "21"))
+    return start, end
+
+
 # ─── 발송 한도 체크 + 자동 차단 ───
 
 async def check_send_limits(user: User, send_count: int, db: AsyncSession) -> dict:
@@ -21,22 +37,31 @@ async def check_send_limits(user: User, send_count: int, db: AsyncSession) -> di
 
     now = datetime.now()
 
-    # 야간 발송 차단
-    current_hour = now.hour
-    if user.send_start_hour < user.send_end_hour:
-        # 일반: 8~21시 허용
-        if current_hour < user.send_start_hour or current_hour >= user.send_end_hour:
-            return {
-                "allowed": False,
-                "reason": f"발송 가능 시간: {user.send_start_hour}시 ~ {user.send_end_hour}시"
-            }
-    else:
-        # 야간 포함 (예: 22~6시 차단 → start=6, end=22)
-        if current_hour >= user.send_end_hour and current_hour < user.send_start_hour:
-            return {
-                "allowed": False,
-                "reason": f"발송 가능 시간: {user.send_start_hour}시 ~ {user.send_end_hour}시"
-            }
+    # 야간 발송 차단 (start=0, end=0 이면 시간 제한 사용 안함)
+    start_h = user.send_start_hour
+    end_h = user.send_end_hour
+    if start_h is None or end_h is None:
+        # 사용자 값이 없으면 서버 기본값 조회
+        start_h, end_h = await _get_default_send_hours(db)
+
+    time_limit_disabled = (start_h == 0 and end_h == 0)
+
+    if not time_limit_disabled:
+        current_hour = now.hour
+        if start_h < end_h:
+            # 일반: 8~21시 허용
+            if current_hour < start_h or current_hour >= end_h:
+                return {
+                    "allowed": False,
+                    "reason": f"발송 가능 시간: {start_h}시 ~ {end_h}시"
+                }
+        elif start_h > end_h:
+            # 야간 포함 (예: 22~6시 차단 → start=6, end=22)
+            if current_hour >= end_h and current_hour < start_h:
+                return {
+                    "allowed": False,
+                    "reason": f"발송 가능 시간: {start_h}시 ~ {end_h}시"
+                }
 
     # 시간당 발송량 체크
     one_hour_ago = now - timedelta(hours=1)

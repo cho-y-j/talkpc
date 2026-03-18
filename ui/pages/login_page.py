@@ -20,7 +20,8 @@ class LoginPage(ctk.CTkFrame):
         self.grid_rowconfigure(0, weight=1)
 
         # 중앙 카드
-        card = ctk.CTkFrame(self, fg_color=T.BG_CARD, corner_radius=16, width=400)
+        card = ctk.CTkFrame(self, fg_color=T.BG_CARD, corner_radius=16, width=420,
+                            border_width=1, border_color=T.BORDER)
         card.place(relx=0.5, rely=0.5, anchor="center")
 
         # 로고
@@ -61,6 +62,14 @@ class LoginPage(ctk.CTkFrame):
                                            placeholder_text="비밀번호 입력")
         self.password_entry.pack(fill="x", pady=(2, 8))
 
+        # 이메일 (회원가입시만)
+        self.email_frame = ctk.CTkFrame(form, fg_color="transparent")
+        ctk.CTkLabel(self.email_frame, text="이메일", font=(T.get_font_family(), 12),
+                     text_color=T.TEXT_SECONDARY).pack(anchor="w")
+        self.email_entry = ctk.CTkEntry(self.email_frame, height=38,
+                                        placeholder_text="example@email.com")
+        self.email_entry.pack(fill="x", pady=(2, 8))
+
         # 전화번호 (회원가입시만)
         self.phone_frame = ctk.CTkFrame(form, fg_color="transparent")
         ctk.CTkLabel(self.phone_frame, text="전화번호", font=(T.get_font_family(), 12),
@@ -72,7 +81,8 @@ class LoginPage(ctk.CTkFrame):
         # 로그인/가입 버튼
         self.action_btn = ctk.CTkButton(form, text="로그인", height=42,
                                         font=(T.get_font_family(), 14, "bold"),
-                                        fg_color=T.ACCENT, hover_color=T.ACCENT_HOVER,
+                                        fg_color="#1a1a1a", hover_color="#333333",
+                                        text_color="#ffffff",
                                         command=self._do_action)
         self.action_btn.pack(fill="x", pady=(10, 5))
 
@@ -108,12 +118,15 @@ class LoginPage(ctk.CTkFrame):
             self.name_frame.pack(in_=self.username_entry.master,
                                  before=self.username_entry.master.winfo_children()[0],
                                  fill="x")
-            self.phone_frame.pack(in_=self.password_entry.master,
+            self.email_frame.pack(in_=self.password_entry.master,
                                   after=self.password_entry, fill="x")
+            self.phone_frame.pack(in_=self.password_entry.master,
+                                  after=self.email_frame, fill="x")
             self.action_btn.configure(text="회원가입")
             self.toggle_btn.configure(text="이미 계정이 있으신가요? 로그인")
         else:
             self.name_frame.pack_forget()
+            self.email_frame.pack_forget()
             self.phone_frame.pack_forget()
             self.action_btn.configure(text="로그인")
             self.toggle_btn.configure(text="계정이 없으신가요? 회원가입")

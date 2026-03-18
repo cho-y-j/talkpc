@@ -11,6 +11,7 @@ from app.models.credit import Credit
 from app.models.send_log import SendLog
 from app.models.device import Device, SecurityLog
 from app.models.charge_request import ChargeRequest, ServerSetting
+from app.models.user_callback import UserCallback
 from app.schemas.admin import CreditGrant, AdminUserUpdate
 from app.middleware.auth import require_admin
 from app.services import credit_service, stats_service
@@ -69,6 +70,13 @@ async def get_user(user_id: int, admin: User = Depends(require_admin), db: Async
     )
     sec_logs = sec_result.scalars().all()
 
+    # 발신번호
+    cb_result = await db.execute(
+        select(UserCallback).where(UserCallback.user_id == user.id)
+        .order_by(UserCallback.created_at.desc())
+    )
+    callbacks = cb_result.scalars().all()
+
     return {
         "user": {
             "id": user.id, "username": user.username, "name": user.name,
@@ -100,6 +108,11 @@ async def get_user(user_id: int, admin: User = Depends(require_admin), db: Async
             {"id": s.id, "event_type": s.event_type, "detail": s.detail,
              "ip_address": s.ip_address, "created_at": s.created_at.isoformat()}
             for s in sec_logs
+        ],
+        "callbacks": [
+            {"id": cb.id, "phone": cb.phone, "is_active": cb.is_active,
+             "memo": cb.memo, "created_at": cb.created_at.isoformat()}
+            for cb in callbacks
         ],
     }
 
@@ -207,6 +220,105 @@ async def delete_device(
                              f"관리자({admin.username})가 기기 삭제: {device_name}", db)
     await db.commit()
     return {"message": f"기기 '{device_name}' 삭제 완료"}
+
+
+# ══════════════════════════════════════════════
+#  발신번호 관리 (관리자)
+# ══════════════════════════════════════════════
+
+class AdminCallbackCreate(BaseModel):
+    phone: str
+    memo: str = ""
+
+
+@router.post("/users/{user_id}/callbacks")
+async def admin_add_callback(
+    user_id: int, body: AdminCallbackCreate,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """관리자가 사용자의 발신번호 추가"""
+    result = await db.execute(select(User).where(User.id == user_id))
+    user = result.scalar_one_or_none()
+    if not user:
+        raise HTTPException(404, "사용자를 찾을 수 없습니다")
+
+    phone = body.phone.strip().replace("-", "")
+    if not phone:
+        raise HTTPException(400, "전화번호를 입력하세요")
+
+    # 중복 확인
+    existing = await db.execute(
+        select(UserCallback).where(
+            UserCallback.user_id == user_id,
+            UserCallback.phone == phone
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(400, "이미 등록된 발신번호입니다")
+
+    cb = UserCallback(user_id=user_id, phone=phone, memo=body.memo)
+    db.add(cb)
+    await db.commit()
+    await db.refresh(cb)
+    return {
+        "id": cb.id, "phone": cb.phone, "is_active": cb.is_active,
+        "memo": cb.memo, "message": "발신번호가 추가되었습니다"
+    }
+
+
+@router.put("/users/{user_id}/callbacks/{cb_id}/activate")
+async def admin_activate_callback(
+    user_id: int, cb_id: int,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """관리자가 사용자의 발신번호 활성화"""
+    result = await db.execute(
+        select(UserCallback).where(
+            UserCallback.id == cb_id,
+            UserCallback.user_id == user_id
+        )
+    )
+    cb = result.scalar_one_or_none()
+    if not cb:
+        raise HTTPException(404, "발신번호를 찾을 수 없습니다")
+
+    # 기존 활성 발신번호 비활성화
+    all_result = await db.execute(
+        select(UserCallback).where(
+            UserCallback.user_id == user_id,
+            UserCallback.is_active == True
+        )
+    )
+    for active_cb in all_result.scalars().all():
+        active_cb.is_active = False
+
+    cb.is_active = True
+    await db.commit()
+    return {"message": f"발신번호 {cb.phone}이(가) 활성화되었습니다"}
+
+
+@router.delete("/users/{user_id}/callbacks/{cb_id}")
+async def admin_delete_callback(
+    user_id: int, cb_id: int,
+    admin: User = Depends(require_admin),
+    db: AsyncSession = Depends(get_db)
+):
+    """관리자가 사용자의 발신번호 삭제"""
+    result = await db.execute(
+        select(UserCallback).where(
+            UserCallback.id == cb_id,
+            UserCallback.user_id == user_id
+        )
+    )
+    cb = result.scalar_one_or_none()
+    if not cb:
+        raise HTTPException(404, "발신번호를 찾을 수 없습니다")
+
+    await db.delete(cb)
+    await db.commit()
+    return {"message": "발신번호가 삭제되었습니다"}
 
 
 @router.get("/security-logs")

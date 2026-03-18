@@ -98,6 +98,7 @@ class KakaoSender:
         self._stop_flag = False
         self._safety_error = None
         self._send_count = 0  # 연속 발송 횟수 (2번째부터 돋보기 2회 클릭)
+        self._last_mouse_pos = None  # 마우스 이동 감지용
 
         # 에러 콜백
         self._on_safety_stop = None
@@ -113,6 +114,7 @@ class KakaoSender:
         self._stop_flag = False
         self._safety_error = None
         self._send_count = 0
+        self._last_mouse_pos = None
 
     # ── 사람처럼 행동 ──
 
@@ -152,6 +154,9 @@ class KakaoSender:
         macOS: Quartz CGEvent로 정확한 클릭/더블클릭
         """
         try:
+            # 클릭 전: 사용자가 마우스를 움직였는지 감지
+            self._check_mouse_moved()
+
             if self.is_mac and clicks >= 2:
                 # macOS 더블클릭: Quartz CGEvent 사용
                 from Quartz import (
@@ -203,13 +208,8 @@ class KakaoSender:
 
             self._human_delay(0.2, 0.5)
 
-            # 클릭 후: 마우스가 엉뚱한 곳에 가있는지 체크
-            curr_x, curr_y = pyautogui.position()
-            if abs(curr_x - x) > 200 or abs(curr_y - y) > 200:
-                raise SafetyError(
-                    f"마우스가 예상 위치({x},{y})에서 벗어남 "
-                    f"→ 현재({curr_x},{curr_y}). 사용자가 마우스를 움직인 것 같습니다."
-                )
+            # 클릭 후: 마우스 위치 기록 (다음 클릭 전 이동 감지용)
+            self._record_mouse_pos()
 
         except pyautogui.FailSafeException:
             raise SafetyError("긴급 정지! 마우스가 화면 좌측 상단 모서리로 이동했습니다.")
@@ -355,6 +355,27 @@ class KakaoSender:
         """중지 플래그 체크"""
         if self._stop_flag:
             raise SafetyError("사용자가 발송을 중지했습니다.")
+
+    def _record_mouse_pos(self):
+        """현재 마우스 위치 기록 (클릭 직후 호출)"""
+        if pyautogui:
+            self._last_mouse_pos = pyautogui.position()
+
+    def _check_mouse_moved(self):
+        """사용자가 마우스를 움직였는지 감지 (클릭 전 호출)"""
+        if pyautogui and self._last_mouse_pos:
+            curr = pyautogui.position()
+            lx, ly = self._last_mouse_pos
+            dist = abs(curr[0] - lx) + abs(curr[1] - ly)
+            if dist > 50:  # 클릭 후 마우스가 50px 이상 이동 = 사용자 개입
+                self._stop_flag = True
+                self._safety_error = (
+                    f"마우스가 이동했습니다 ({lx},{ly})→({curr[0]},{curr[1]}). "
+                    "사용자 개입으로 발송을 중단합니다."
+                )
+                if self._on_safety_stop:
+                    self._on_safety_stop(self._safety_error)
+                raise SafetyError(self._safety_error)
 
     # ── 카카오톡 조작 ──
 

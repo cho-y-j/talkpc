@@ -37,7 +37,7 @@
 
             const res = await fetch('/api/auth/login', {
                 method: 'POST',
-                headers: {'Content-Type': 'application/json', 'X-API-Key': 'tpc-k8x2m9vQfR7wLpN3jY6sT0dA4hE1cU5b'},
+                headers: {'Content-Type': 'application/json', 'X-API-Key': '{{ api_key }}'},
                 body: JSON.stringify({
                     username: document.getElementById('username').value,
                     password: document.getElementById('password').value

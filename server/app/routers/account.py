@@ -1,4 +1,4 @@
-"""계정 라우터 - 내 정보/잔액/충전 요청"""
+"""계정 라우터 - 내 정보/잔액/충전 요청/발신번호"""
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
 from typing import Optional
@@ -7,6 +7,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.database import get_db
 from app.models.user import User
 from app.models.charge_request import ChargeRequest, ServerSetting
+from app.models.user_callback import UserCallback
 from app.schemas.user import UserResponse, UserUpdate
 from app.middleware.auth import get_current_user
 from app.services import credit_service
@@ -137,7 +138,7 @@ async def get_pricing(db: AsyncSession = Depends(get_db)):
             ServerSetting.key.in_([
                 'cost_sms', 'cost_lms', 'cost_alimtalk',
                 'cost_rcs_sms', 'cost_rcs_lms', 'cost_rcs_mms',
-                'bank_account'
+                'cost_brandtalk', 'bank_account'
             ])
         )
     )
@@ -149,5 +150,123 @@ async def get_pricing(db: AsyncSession = Depends(get_db)):
         "rcs_sms": int(settings.get("cost_rcs_sms", "12")),
         "rcs_lms": int(settings.get("cost_rcs_lms", "30")),
         "rcs_mms": int(settings.get("cost_rcs_mms", "50")),
+        "brandtalk": int(settings.get("cost_brandtalk", "15")),
         "bank_account": settings.get("bank_account", ""),
     }
+
+
+# ── 발신번호 관리 ──
+
+class CallbackCreate(BaseModel):
+    phone: str
+    memo: str = ""
+
+
+@router.get("/callbacks")
+async def list_callbacks(
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """내 발신번호 목록"""
+    result = await db.execute(
+        select(UserCallback)
+        .where(UserCallback.user_id == user.id)
+        .order_by(UserCallback.created_at.desc())
+    )
+    callbacks = result.scalars().all()
+    return [
+        {
+            "id": cb.id, "phone": cb.phone, "is_active": cb.is_active,
+            "memo": cb.memo, "created_at": cb.created_at.isoformat()
+        }
+        for cb in callbacks
+    ]
+
+
+@router.post("/callbacks")
+async def create_callback(
+    req: CallbackCreate,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """발신번호 등록"""
+    phone = req.phone.strip().replace("-", "")
+    if not phone:
+        raise HTTPException(400, "전화번호를 입력하세요")
+
+    # 중복 확인
+    existing = await db.execute(
+        select(UserCallback).where(
+            UserCallback.user_id == user.id,
+            UserCallback.phone == phone
+        )
+    )
+    if existing.scalar_one_or_none():
+        raise HTTPException(400, "이미 등록된 발신번호입니다")
+
+    cb = UserCallback(
+        user_id=user.id,
+        phone=phone,
+        memo=req.memo,
+    )
+    db.add(cb)
+    await db.commit()
+    await db.refresh(cb)
+    return {
+        "id": cb.id, "phone": cb.phone, "is_active": cb.is_active,
+        "memo": cb.memo, "created_at": cb.created_at.isoformat()
+    }
+
+
+@router.put("/callbacks/{cb_id}/activate")
+async def activate_callback(
+    cb_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """발신번호 활성화 (다른 발신번호는 비활성화)"""
+    result = await db.execute(
+        select(UserCallback).where(
+            UserCallback.id == cb_id,
+            UserCallback.user_id == user.id
+        )
+    )
+    cb = result.scalar_one_or_none()
+    if not cb:
+        raise HTTPException(404, "발신번호를 찾을 수 없습니다")
+
+    # 기존 활성 발신번호 비활성화
+    all_result = await db.execute(
+        select(UserCallback).where(
+            UserCallback.user_id == user.id,
+            UserCallback.is_active == True
+        )
+    )
+    for active_cb in all_result.scalars().all():
+        active_cb.is_active = False
+
+    cb.is_active = True
+    await db.commit()
+    return {"message": f"발신번호 {cb.phone}이(가) 활성화되었습니다"}
+
+
+@router.delete("/callbacks/{cb_id}")
+async def delete_callback(
+    cb_id: int,
+    user: User = Depends(get_current_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """발신번호 삭제"""
+    result = await db.execute(
+        select(UserCallback).where(
+            UserCallback.id == cb_id,
+            UserCallback.user_id == user.id
+        )
+    )
+    cb = result.scalar_one_or_none()
+    if not cb:
+        raise HTTPException(404, "발신번호를 찾을 수 없습니다")
+
+    await db.delete(cb)
+    await db.commit()
+    return {"message": "발신번호가 삭제되었습니다"}

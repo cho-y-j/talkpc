@@ -17,6 +17,7 @@ from ui.pages.usage_page import UsagePage
 from ui.pages.charge_page import ChargePage
 from ui.pages.alimtalk_designer_page import AlimtalkDesignerPage
 from ui.pages.rcs_designer_page import RCSDesignerPage
+from ui.pages.brandtalk_designer_page import BrandtalkDesignerPage
 
 
 class App(ctk.CTk):
@@ -30,8 +31,8 @@ class App(ctk.CTk):
 
         # -- 윈도우 설정 --
         self.title("TalkPC - Auto Messenger")
-        self.geometry("1100x750")
-        self.minsize(900, 600)
+        self.geometry("1300x950")
+        self.minsize(1100, 800)
         self.configure(fg_color=T.BG_DARK)
 
         # 다크 모드 설정
@@ -139,6 +140,9 @@ class App(ctk.CTk):
             self.content_frame, orchestrator=self.orchestrator
         )
         self.pages["alimtalk_designer"] = AlimtalkDesignerPage(
+            self.content_frame, api_client=self.api_client
+        )
+        self.pages["brandtalk_designer"] = BrandtalkDesignerPage(
             self.content_frame, api_client=self.api_client
         )
         self.pages["rcs_designer"] = RCSDesignerPage(

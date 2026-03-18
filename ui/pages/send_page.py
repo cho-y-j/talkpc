@@ -9,6 +9,29 @@ from ui.theme import AppTheme as T
 from ui.components.widgets import ProgressCard, LogPanel
 
 
+class _ApiContact:
+    """API 연락처를 로컬 Contact처럼 사용하기 위한 래퍼"""
+    def __init__(self, data: dict):
+        self.id = data.get("id")
+        self.name = data.get("name", "")
+        self.phone = data.get("phone", "")
+        self.company = data.get("company", "")
+        self.position = data.get("position", "")
+        self.memo = data.get("memo", "")
+        self.category = data.get("category", "other")
+        self.birthday = data.get("birthday", "")
+        self.anniversary = data.get("anniversary", "")
+        self.send_count = data.get("send_count", 0)
+
+    def to_dict(self):
+        return {
+            "name": self.name, "phone": self.phone,
+            "company": self.company, "position": self.position,
+            "memo": self.memo, "category": self.category,
+            "birthday": self.birthday, "anniversary": self.anniversary,
+        }
+
+
 class SendPage(ctk.CTkFrame):
     """발송 실행 페이지 - 대상 선택 + 메시지 + 발송"""
 
@@ -26,7 +49,7 @@ class SendPage(ctk.CTkFrame):
     def _build(self):
         # -- 헤더 --
         header = ctk.CTkFrame(self, fg_color="transparent", height=50)
-        header.pack(fill="x", padx=24, pady=(20, 12))
+        header.pack(fill="x", padx=24, pady=(20, 8))
         header.pack_propagate(False)
 
         ctk.CTkLabel(
@@ -35,29 +58,53 @@ class SendPage(ctk.CTkFrame):
             text_color=T.TEXT_PRIMARY
         ).pack(side="left")
 
-        # 발송 방법 선택
-        ctk.CTkLabel(
-            header, text="발송 방법:",
-            font=(T.get_font_family(), T.FONT_SIZE_SMALL),
-            text_color=T.TEXT_MUTED
-        ).pack(side="right", padx=(0, 4))
-
+        # -- 발송 방법 카드 선택 --
         self.send_method_var = ctk.StringVar(value="카카오톡 봇")
-        self.send_method_menu = ctk.CTkOptionMenu(
-            header,
-            values=["카카오톡 봇", "알림톡 (세종)", "문자 SMS/LMS (세종)"],
-            variable=self.send_method_var,
-            font=(T.get_font_family(), T.FONT_SIZE_SMALL),
-            fg_color=T.BG_INPUT, button_color=T.BG_HOVER,
-            text_color=T.TEXT_PRIMARY, height=30, corner_radius=6,
-            width=180,
-            command=self._on_send_method_change
+        self._selected_method_key = "카카오톡 봇"
+
+        method_frame = ctk.CTkFrame(self, fg_color="transparent", height=72)
+        method_frame.pack(fill="x", padx=24, pady=(0, 4))
+        method_frame.pack_propagate(False)
+
+        self._method_cards = {}
+        method_configs = [
+            ("카카오톡 봇", "💬", "카카오톡 봇", "무료", "#2ea043"),
+            ("문자 SMS/LMS (세종)", "📱", "문자 SMS/LMS", "8원/건", "#58a6ff"),
+            ("브랜드톡 (카카오)", "🟡", "브랜드톡", "유료", "#d29922"),
+            ("알림톡 (세종)", "💛", "알림톡", "유료", "#7cb342"),
+        ]
+
+        for method_key, icon, label, badge, color in method_configs:
+            card_btn = ctk.CTkButton(
+                method_frame, text=f"{icon}\n{label}\n{badge}",
+                width=140, height=60,
+                font=(T.get_font_family(), 10, "bold"),
+                fg_color=T.BG_CARD, hover_color=T.BG_HOVER,
+                text_color=T.TEXT_SECONDARY,
+                border_width=2,
+                border_color=T.BORDER,
+                corner_radius=10,
+                command=lambda mk=method_key: self._select_method_card(mk)
+            )
+            card_btn.pack(side="left", padx=(0, 8))
+            self._method_cards[method_key] = (card_btn, color)
+
+        # 발송 방법 상태 바 (카드 선택보다 먼저 생성)
+        self.method_status_label = ctk.CTkLabel(
+            self, text="📨 카카오톡 봇으로 메시지 보내기 (무료)",
+            font=(T.get_font_family(), 11, "bold"),
+            text_color=T.TEXT_SECONDARY,
+            fg_color=T.BG_CARD, corner_radius=6, height=28
         )
-        self.send_method_menu.pack(side="right", padx=(0, 8))
+        self.method_status_label.pack(fill="x", padx=24, pady=(0, 8))
+
+        # 기본 선택 하이라이트
+        self._select_method_card("카카오톡 봇")
 
         # -- 상단: 대상 선택 (좌) + 메시지 작성 (우) --
-        top_frame = ctk.CTkFrame(self, fg_color="transparent")
-        top_frame.pack(fill="both", expand=True, padx=24, pady=(0, 8))
+        top_frame = ctk.CTkFrame(self, fg_color="transparent", height=350)
+        top_frame.pack(fill="both", padx=24, pady=(0, 8))
+        top_frame.pack_propagate(False)
         top_frame.grid_columnconfigure(0, weight=2)
         top_frame.grid_columnconfigure(1, weight=3)
         top_frame.grid_rowconfigure(0, weight=1)
@@ -177,6 +224,19 @@ class SendPage(ctk.CTkFrame):
             command=self._refresh_templates
         ).pack(side="right")
 
+        # 템플릿 미리보기 스니펫 (항상 존재, 텍스트 비면 높이 0)
+        self._tmpl_preview_frame = ctk.CTkFrame(right_card, fg_color="transparent", height=0)
+        self._tmpl_preview_frame.pack(fill="x", padx=12, pady=0)
+        self._tmpl_preview_frame.pack_propagate(False)
+
+        self.template_preview_label = ctk.CTkLabel(
+            self._tmpl_preview_frame, text="",
+            font=(T.get_font_family(), 9),
+            text_color=T.TEXT_MUTED, anchor="w",
+            fg_color=T.BG_INPUT, corner_radius=4, height=20
+        )
+        self.template_preview_label.pack(fill="x")
+
         # 변수 버튼들
         var_frame = ctk.CTkFrame(right_card, fg_color="transparent", height=28)
         var_frame.pack(fill="x", padx=12, pady=(0, 4))
@@ -265,8 +325,8 @@ class SendPage(ctk.CTkFrame):
         self.preview_box.pack(fill="x", padx=12, pady=(2, 12))
 
         # -- 하단: 컨트롤 + 로그 --
-        bottom_frame = ctk.CTkFrame(self, fg_color="transparent", height=200)
-        bottom_frame.pack(fill="x", padx=24, pady=(0, 12))
+        bottom_frame = ctk.CTkFrame(self, fg_color="transparent")
+        bottom_frame.pack(fill="both", expand=True, padx=24, pady=(0, 12))
 
         # 컨트롤 바
         control_frame = ctk.CTkFrame(bottom_frame, fg_color="transparent", height=50)
@@ -439,7 +499,8 @@ class SendPage(ctk.CTkFrame):
                 is_selected = cid in self.selected_ids
                 self._create_contact_checkbox_row(
                     cid, c_data.get("name", ""), c_data.get("category", "other"),
-                    c_data.get("company", ""), c_data.get("send_count", 0), is_selected
+                    c_data.get("phone", ""), c_data.get("company", ""),
+                    c_data.get("send_count", 0), is_selected
                 )
         elif self.orchestrator:
             # 로컬 모드
@@ -459,12 +520,13 @@ class SendPage(ctk.CTkFrame):
                 is_selected = contact.id in self.selected_ids
                 self._create_contact_checkbox_row(
                     contact.id, contact.name, contact.category,
-                    contact.company, contact.send_count, is_selected
+                    getattr(contact, 'phone', ''), contact.company,
+                    contact.send_count, is_selected
                 )
 
         self._update_selected_count()
 
-    def _create_contact_checkbox_row(self, cid, name, category, company, send_count, is_selected):
+    def _create_contact_checkbox_row(self, cid, name, category, phone, company, send_count, is_selected):
         """연락처 체크박스 행 생성 (로컬/API 공용)"""
         row = ctk.CTkFrame(
             self.contact_list_frame,
@@ -495,7 +557,13 @@ class SendPage(ctk.CTkFrame):
             row, text=name,
             font=(T.get_font_family(), T.FONT_SIZE_SMALL, "bold"),
             text_color=T.TEXT_PRIMARY
-        ).pack(side="left", padx=(0, 8))
+        ).pack(side="left", padx=(0, 4))
+
+        if phone:
+            ctk.CTkLabel(
+                row, text=phone,
+                font=(T.get_font_family(), 9), text_color=T.INFO
+            ).pack(side="left", padx=(0, 6))
 
         if company:
             ctk.CTkLabel(
@@ -553,9 +621,17 @@ class SendPage(ctk.CTkFrame):
     def _on_template_select(self, name):
         if name == "직접 입력":
             self._selected_template = None
+            self._tmpl_preview_frame.configure(height=0)
+            self.template_preview_label.configure(text="")
             return
         tmpl = self._template_map.get(name)
         if tmpl:
+            # 미리보기 스니펫 표시
+            snippet = tmpl.content.replace("\n", " ")[:50]
+            if len(tmpl.content) > 50:
+                snippet += "..."
+            self.template_preview_label.configure(text=f"  📄 {snippet}")
+            self._tmpl_preview_frame.configure(height=24)
             self._selected_template = tmpl
             self.msg_editor.delete("1.0", "end")
             self.msg_editor.insert("1.0", tmpl.content)
@@ -600,21 +676,56 @@ class SendPage(ctk.CTkFrame):
 
     # ═══ 발송 방법 ═══
 
+    def _select_method_card(self, method_key):
+        """발송 방법 카드 선택"""
+        self._selected_method_key = method_key
+        self.send_method_var.set(method_key)
+
+        # 카드 하이라이트 업데이트
+        for mk, (btn, color) in self._method_cards.items():
+            if mk == method_key:
+                btn.configure(border_color=color, text_color=T.TEXT_PRIMARY,
+                              fg_color=T.BG_HOVER)
+            else:
+                btn.configure(border_color=T.BORDER, text_color=T.TEXT_SECONDARY,
+                              fg_color=T.BG_CARD)
+
+        # 상태 바 업데이트
+        status_map = {
+            "카카오톡 봇": "📨 카카오톡 봇으로 메시지 보내기 (무료)",
+            "문자 SMS/LMS (세종)": "📨 문자 SMS/LMS로 발송 (8원/건)",
+            "브랜드톡 (카카오)": "📨 브랜드톡으로 발송 (유료)",
+            "알림톡 (세종)": "📨 알림톡으로 발송 (유료)",
+        }
+        self.method_status_label.configure(
+            text=status_map.get(method_key, f"📨 {method_key}")
+        )
+
+        self._on_send_method_change(method_key)
+
     def _on_send_method_change(self, value):
         """발송 방법 변경 시"""
         method_map = {
             "카카오톡 봇": "kakao_bot",
             "알림톡 (세종)": "alimtalk",
+            "브랜드톡 (카카오)": "brandtalk",
             "문자 SMS/LMS (세종)": "sms",
         }
         method = method_map.get(value, "kakao_bot")
         if self.orchestrator:
             self.orchestrator.send_method = method
-        self.log_panel.add_log(f"발송 방법: {value}", "info")
+        if hasattr(self, 'log_panel'):
+            self.log_panel.add_log(f"발송 방법: {value}", "info")
 
     # ═══ 발송 ═══
 
     def _start_send(self):
+        # 디버그 로그
+        if hasattr(self, 'log_panel'):
+            self.log_panel.add_log(
+                f"발송 시작 → 방법: {self._selected_method_key}, 선택: {len(self.selected_ids)}명",
+                "info"
+            )
         # 선택 확인
         if not self.selected_ids:
             messagebox.showwarning("발송 불가", "발송 대상을 선택해주세요.")
@@ -625,23 +736,79 @@ class SendPage(ctk.CTkFrame):
             messagebox.showwarning("발송 불가", "메시지를 입력해주세요.")
             return
 
-        # === SaaS 모드: API 발송 ===
-        if self.api_client and self.api_client.is_logged_in:
+        # 발송 방법 결정
+        method_label = self._selected_method_key  # 한글 키
+        method_map = {
+            "카카오톡 봇": "kakao_bot",
+            "알림톡 (세종)": "alimtalk",
+            "브랜드톡 (카카오)": "brandtalk",
+            "문자 SMS/LMS (세종)": "sms",
+        }
+        send_method = method_map.get(method_label, "kakao_bot")
+
+        # === SaaS 모드: API 발송 (카카오톡 봇 제외 - 봇은 무료 로컬 매크로) ===
+        if self.api_client and self.api_client.is_logged_in and send_method != "kakao_bot":
             self._start_send_api(message)
             return
 
-        # === 로컬 모드 ===
+        # === 로컬/카카오봇 모드 ===
         if not self.orchestrator:
             self.log_panel.add_log("orchestrator 없음", "error")
             return
 
-        send_method = self.orchestrator.send_method
-
         if send_method == "kakao_bot":
-            if not self.orchestrator.sender:
-                messagebox.showwarning("셋팅 미완료",
-                    "카카오톡 초기화가 완료되지 않았습니다.\n대시보드의 '카카오톡 초기화'를 먼저 실행해주세요.")
+            if not self.orchestrator:
+                messagebox.showwarning("오류", "Orchestrator가 없습니다.")
                 return
+            # sender가 없으면 자동 초기화 시도 (별도 스레드)
+            if not self.orchestrator.sender:
+                self.log_panel.add_log("카카오톡 봇 자동 초기화 중...", "info")
+                self.start_btn.configure(state="disabled")
+
+                import threading
+                def _init_kakao():
+                    success = False
+                    msg = ""
+                    try:
+                        from pathlib import Path
+                        positions_path = self.orchestrator.base_dir / "config" / "learned_positions.json"
+                        if not positions_path.exists():
+                            msg = "위치 학습 데이터가 없습니다.\n설정 → '위치 학습 시작'을 먼저 실행하세요."
+                        else:
+                            import json
+                            with open(positions_path, "r", encoding="utf-8") as f:
+                                self.orchestrator.coordinates = json.load(f)
+                            if self.orchestrator.window_ctrl.find_kakao_window():
+                                self.orchestrator.window_ctrl.activate_kakao()
+                                import time
+                                time.sleep(0.3)
+                                self.orchestrator.window_ctrl.calculate_kakao_position()
+                                self.orchestrator.window_ctrl.position_kakao_window()
+                                self.orchestrator.confirm_calibration()
+                                if self.orchestrator.sender:
+                                    success = True
+                                else:
+                                    msg = "카카오톡 초기화에 실패했습니다."
+                            else:
+                                msg = "카카오톡이 실행되어 있지 않습니다.\n카카오톡 PC를 먼저 실행하세요."
+                    except Exception as e:
+                        msg = f"초기화 오류: {e}"
+
+                    def _done():
+                        self.start_btn.configure(state="normal")
+                        if success:
+                            self.log_panel.add_log("카카오톡 봇 초기화 완료!", "success")
+                            # 초기화 성공 → 발송 재시도
+                            self._start_send()
+                        else:
+                            self.log_panel.add_log(f"초기화 실패: {msg}", "error")
+                            messagebox.showwarning("카카오톡 봇 사용 불가", msg)
+                    self.after(0, _done)
+
+                threading.Thread(target=_init_kakao, daemon=True).start()
+                return  # 스레드에서 완료 후 _start_send 재호출
+
+            # sender 있으면 정상 진행
         else:
             if not self.orchestrator.sejong_sender:
                 sejong_cfg = self.orchestrator.config.get("sejong", {})
@@ -654,10 +821,23 @@ class SendPage(ctk.CTkFrame):
                     messagebox.showerror("DB 연결 실패", result.get("message", "연결 실패"))
                     return
 
-        selected_contacts = [
-            c for c in self.orchestrator.contact_mgr.get_all()
-            if c.id in self.selected_ids
-        ]
+        # SaaS 모드에서 카카오톡 봇 사용 시: API 연락처 캐시에서 가져오기
+        if self.api_client and self.api_client.is_logged_in:
+            # 캐시가 비어있으면 새로 로드
+            if not self._api_contacts:
+                try:
+                    self._api_contacts = self.api_client.get_contacts()
+                except Exception:
+                    pass
+            selected_contacts = []
+            for c_data in self._api_contacts:
+                if c_data.get("id") in self.selected_ids:
+                    selected_contacts.append(_ApiContact(c_data))
+        else:
+            selected_contacts = [
+                c for c in self.orchestrator.contact_mgr.get_all()
+                if c.id in self.selected_ids
+            ]
         if not selected_contacts:
             messagebox.showwarning("발송 불가", "선택된 연락처가 없습니다.")
             return
@@ -676,14 +856,20 @@ class SendPage(ctk.CTkFrame):
         if tmpl and len(tmpl.contents) > 1:
             template_contents = tmpl.contents
 
-        self.orchestrator.prepare_custom_queue(
-            selected_contacts, message,
-            image_path=self.image_path,
-            template_contents=template_contents
-        )
-        method_label = {"kakao_bot": "카카오톡 봇", "alimtalk": "알림톡", "sms": "SMS/LMS"}.get(send_method, send_method)
+        self.log_panel.add_log(f"큐 준비: {len(selected_contacts)}명, 메시지: {message[:30]}...", "info")
+        try:
+            self.orchestrator.prepare_custom_queue(
+                selected_contacts, message,
+                image_path=self.image_path,
+                template_contents=template_contents
+            )
+        except Exception as e:
+            self.log_panel.add_log(f"큐 준비 오류: {e}", "error")
+            return
+
+        method_label = {"kakao_bot": "카카오톡 봇", "alimtalk": "알림톡", "brandtalk": "브랜드톡", "sms": "SMS/LMS"}.get(send_method, send_method)
         variation_info = f" ({len(template_contents)}개 변형 랜덤)" if template_contents else ""
-        self.log_panel.add_log(f"[{method_label}] 발송 큐: {len(selected_contacts)}명{variation_info}", "info")
+        self.log_panel.add_log(f"[{method_label}] 발송 큐: {len(self.orchestrator.send_queue)}건{variation_info}", "info")
 
         self.orchestrator.on_progress(self._on_progress)
         self.orchestrator.on_result(self._on_result)
@@ -692,6 +878,7 @@ class SendPage(ctk.CTkFrame):
         self.start_btn.configure(state="disabled")
 
         if send_method == "kakao_bot":
+            self.log_panel.add_log(f"카카오봇 발송 시작 (sender={self.orchestrator.sender is not None})", "info")
             try:
                 d_min = int(self.delay_min.get())
                 d_max = int(self.delay_max.get())
@@ -703,31 +890,82 @@ class SendPage(ctk.CTkFrame):
         else:
             self.orchestrator.start_sejong_sending()
 
-    def _start_send_api(self, message: str):
-        """SaaS 모드: API 발송"""
+    def _start_send_api(self, raw_message: str):
+        """SaaS 모드: API 발송 (변수 치환 후 개별 발송)"""
         send_method = self.send_method_var.get()
-        contact_ids = list(self.selected_ids)
+
+        # API 연락처 캐시에서 선택된 대상 가져오기
+        if not self._api_contacts:
+            try:
+                self._api_contacts = self.api_client.get_contacts()
+            except Exception:
+                pass
+
+        selected = [c for c in self._api_contacts if c.get("id") in self.selected_ids]
+        if not selected:
+            messagebox.showwarning("발송 불가", "선택된 연락처가 없습니다.")
+            return
+
+        # 변수 치환 여부 확인
+        has_vars = any(v in raw_message for v in ["%이름%", "%회사%", "%직급%", "%카테고리%",
+                                                   "%전화번호%", "%메모%", "%생일%", "%기념일%",
+                                                   "%날짜%", "%요일%"])
 
         self.start_btn.configure(state="disabled")
-        self.log_panel.add_log(f"[{send_method}] {len(contact_ids)}명 발송 요청 중...", "info")
+        self.log_panel.add_log(f"[{send_method}] {len(selected)}명 발송 요청 중...", "info")
 
         import threading
         def _send():
-            try:
-                if "알림톡" in send_method:
-                    result = self.api_client.send_alimtalk(contact_ids, message)
-                else:
-                    result = self.api_client.send_sms(contact_ids, message)
+            from core.message_engine import MessageEngine
+            engine = MessageEngine()
+            total_result = {"total": 0, "success": 0, "failed": 0, "results": [], "total_cost": 0}
 
-                self.after(0, lambda: self._on_api_send_result(result))
-            except Exception as e:
-                detail = str(e)
+            for c_data in selected:
+                # 변수 치환
+                if has_vars:
+                    contact_dict = {
+                        "name": c_data.get("name", ""),
+                        "company": c_data.get("company", ""),
+                        "position": c_data.get("position", ""),
+                        "phone": c_data.get("phone", ""),
+                        "memo": c_data.get("memo", ""),
+                        "category": c_data.get("category", ""),
+                        "birthday": c_data.get("birthday", ""),
+                        "anniversary": c_data.get("anniversary", ""),
+                    }
+                    message = engine.substitute(raw_message, contact_dict)
+                else:
+                    message = raw_message
+
                 try:
-                    import json
-                    detail = json.loads(e.response.text).get("detail", detail)
-                except Exception:
-                    pass
-                self.after(0, lambda: self._on_api_send_error(detail))
+                    cid = c_data["id"]
+                    if "알림톡" in send_method:
+                        result = self.api_client.send_alimtalk([cid], message)
+                    elif "브랜드톡" in send_method:
+                        result = self.api_client.send_brandtalk([cid], message)
+                    else:
+                        result = self.api_client.send_sms([cid], message)
+
+                    total_result["total"] += result.get("total", 0)
+                    total_result["success"] += result.get("success", 0)
+                    total_result["failed"] += result.get("failed", 0)
+                    total_result["total_cost"] += result.get("total_cost", 0)
+                    for r in result.get("results", []):
+                        total_result["results"].append(r)
+                except Exception as e:
+                    total_result["total"] += 1
+                    total_result["failed"] += 1
+                    detail = str(e)
+                    try:
+                        import json as _json
+                        detail = _json.loads(e.response.text).get("detail", detail)
+                    except Exception:
+                        pass
+                    total_result["results"].append({
+                        "name": c_data.get("name", ""), "status": "failed", "detail": detail
+                    })
+
+            self.after(0, lambda: self._on_api_send_result(total_result))
 
         threading.Thread(target=_send, daemon=True).start()
 
@@ -745,11 +983,23 @@ class SendPage(ctk.CTkFrame):
         )
 
         for item in result.get("results", []):
-            emoji = "✅" if item.get("status") == "queued" else "❌"
-            detail = f"mseq={item.get('mseq', '-')}" if item.get("mseq") else item.get("detail", "")
+            status = item.get("status", "")
+            ok = status in ("queued", "sent")
+            emoji = "✅" if ok else "❌"
+            send_code = item.get("send_code", "")
+            detail = f"코드={send_code}" if send_code else item.get("detail", status)
             self.log_panel.add_log(
                 f"  {emoji} {item.get('name', '')} - {detail}",
-                "success" if item.get("status") == "queued" else "error"
+                "success" if ok else "error"
+            )
+
+        # 발송 완료 팝업
+        if success > 0:
+            messagebox.showinfo(
+                "발송 완료",
+                f"총 {total}건 중 {success}건 발송 성공!\n"
+                f"실패: {failed}건\n"
+                f"비용: {total_cost:,}원 차감"
             )
 
     def _on_api_send_error(self, detail: str):

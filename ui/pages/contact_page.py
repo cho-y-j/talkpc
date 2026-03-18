@@ -249,6 +249,27 @@ class ContactPage(ctk.CTkFrame):
             command=lambda c=contact: self._edit_contact(c)
         ).pack(side="right", padx=(0, 4))
 
+        # 인라인 카테고리 변경 (한글 표시)
+        cat_label_map = {"friend": "친구", "family": "가족", "business": "사업체", "vip": "VIP", "other": "기타"}
+        if self.orchestrator:
+            raw_cats = self.orchestrator.contact_mgr.get_all_categories()
+            for c in raw_cats:
+                if c not in cat_label_map:
+                    cat_label_map[c] = c
+        cat_value_map = {v: k for k, v in cat_label_map.items()}
+        cat_labels = list(cat_label_map.values())
+        current_label = cat_label_map.get(contact.category, contact.category)
+        cat_var = ctk.StringVar(value=current_label)
+        cat_menu = ctk.CTkOptionMenu(
+            row, values=cat_labels, variable=cat_var,
+            width=75, height=24,
+            font=(T.get_font_family(), 9),
+            fg_color=T.BG_INPUT, button_color=T.BG_HOVER,
+            text_color=T.TEXT_PRIMARY, corner_radius=4,
+            command=lambda val, _id=contact.id, _m=cat_value_map: self._quick_change_category(_id, _m.get(val, val))
+        )
+        cat_menu.pack(side="right", padx=(0, 4))
+
     def _create_contact_row_api(self, c_data: dict):
         """API 연락처 행 생성 (SaaS 모드)"""
         row = ctk.CTkFrame(
@@ -309,6 +330,35 @@ class ContactPage(ctk.CTkFrame):
             text_color=T.TEXT_MUTED, corner_radius=4,
             command=lambda d=c_data: self._edit_contact_api(d)
         ).pack(side="right", padx=(0, 4))
+
+        # 인라인 카테고리 변경 (한글 표시)
+        cat_labels = ["고객", "친구", "가족", "사업체", "VIP", "기타"]
+        cat_values = ["customer", "friend", "family", "business", "vip", "other"]
+        cat_label_map = dict(zip(cat_values, cat_labels))
+        cat_value_map = dict(zip(cat_labels, cat_values))
+        current_label = cat_label_map.get(cat, cat)
+        cat_var = ctk.StringVar(value=current_label)
+        cat_menu = ctk.CTkOptionMenu(
+            row, values=cat_labels, variable=cat_var,
+            width=75, height=24,
+            font=(T.get_font_family(), 9),
+            fg_color=T.BG_INPUT, button_color=T.BG_HOVER,
+            text_color=T.TEXT_PRIMARY, corner_radius=4,
+            command=lambda val, _id=cid, _m=cat_value_map: self._quick_change_category_api(_id, _m.get(val, val))
+        )
+        cat_menu.pack(side="right", padx=(0, 4))
+
+    def _quick_change_category_api(self, contact_id, new_category):
+        """SaaS: 카테고리 즉시 변경"""
+        try:
+            self.api_client.update_contact(contact_id, {"category": new_category})
+        except Exception:
+            pass
+
+    def _quick_change_category(self, contact_id, new_category):
+        """로컬: 카테고리 즉시 변경"""
+        if self.orchestrator:
+            self.orchestrator.contact_mgr.update(contact_id, category=new_category)
 
     def _delete_contact_api(self, contact_id):
         if messagebox.askyesno("삭제 확인", "정말 삭제하시겠습니까?"):

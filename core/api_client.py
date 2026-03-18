@@ -166,6 +166,17 @@ class APIClient:
             data["buttons"] = buttons
         return self._post("/send/alimtalk", data)
 
+    def send_brandtalk(self, contact_ids: list, message: str,
+                       bubble_type: str = "TEXT", targeting: str = "I",
+                       buttons: list = None, image_url: str = "") -> dict:
+        data = {"contact_ids": contact_ids, "message": message,
+                "bubble_type": bubble_type, "targeting": targeting}
+        if buttons:
+            data["buttons"] = buttons
+        if image_url:
+            data["image_url"] = image_url
+        return self._post("/send/brandtalk", data)
+
     def send_rcs(self, contact_ids: list, message: str,
                  msg_type: str = "standalone", title: str = "",
                  image_url: str = "", buttons: list = None,

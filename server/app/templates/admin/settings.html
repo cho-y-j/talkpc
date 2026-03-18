@@ -47,13 +47,19 @@
                             <td><input type="number" class="form-control form-control-sm" id="cost_rcs_mms" style="width:100px"></td>
                             <td class="text-muted small">RCS 이미지 포함</td>
                         </tr>
+                        <tr>
+                            <td><span class="badge bg-warning text-dark">브랜드톡</span></td>
+                            <td><input type="number" class="form-control form-control-sm" id="cost_brandtalk" style="width:100px"></td>
+                            <td class="text-muted small">카카오 브랜드메시지</td>
+                        </tr>
                     </tbody>
                 </table>
                 <button class="btn btn-dark btn-sm" onclick="savePricing()"><i class="bi bi-check-lg"></i> 단가 저장</button>
                 <div class="alert alert-info mt-3 small mb-0">
                     <i class="bi bi-info-circle"></i>
                     SMS/LMS는 메시지 바이트 길이(EUC-KR 기준 90바이트)로 자동 판별됩니다.<br>
-                    단가 변경 시 서버 재시작 없이 즉시 적용됩니다.
+                    단가 변경 시 서버 재시작 없이 즉시 적용됩니다.<br>
+                    <strong>카카오톡 봇(오토마우스)은 무료</strong>이며 과금 대상이 아닙니다.
                 </div>
             </div>
         </div>
@@ -74,11 +80,17 @@
                         <label class="form-label small">일일 한도 (건)</label>
                         <input type="number" class="form-control form-control-sm" id="default_daily_limit">
                     </div>
-                    <div class="col-6">
+                    <div class="col-12">
+                        <div class="form-check form-switch mb-2">
+                            <input class="form-check-input" type="checkbox" id="default_time_disabled" onchange="toggleDefaultTimeInputs()">
+                            <label class="form-check-label small" for="default_time_disabled">시간 제한 사용 안함</label>
+                        </div>
+                    </div>
+                    <div class="col-6" id="default_time_start_col">
                         <label class="form-label small">발송 시작 시간</label>
                         <input type="number" class="form-control form-control-sm" id="default_send_start_hour" min="0" max="23">
                     </div>
-                    <div class="col-6">
+                    <div class="col-6" id="default_time_end_col">
                         <label class="form-label small">발송 종료 시간</label>
                         <input type="number" class="form-control form-control-sm" id="default_send_end_hour" min="0" max="23">
                     </div>
@@ -102,6 +114,194 @@
                     <input type="text" class="form-control" id="bank_account" placeholder="은행 계좌번호 예금주">
                 </div>
                 <button class="btn btn-dark btn-sm" onclick="saveAccount()"><i class="bi bi-check-lg"></i> 저장</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 알림톡 가입 가이드 -->
+    <div class="col-12">
+        <div class="card stat-card">
+            <div class="card-body">
+                <h5 class="fw-bold mb-3"><i class="bi bi-chat-dots"></i> 카카오 알림톡 사용 가이드</h5>
+                <div class="alert alert-warning small mb-3">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    알림톡은 카카오톡 채널 개설 → 와이드샷 연동 → 템플릿 등록/승인 절차가 <strong>모두 완료</strong>되어야 발송 가능합니다.
+                    전체 소요 기간: <strong>약 3~7 영업일</strong>
+                </div>
+                <div class="accordion" id="alimtalkGuide">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button collapsed small fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#step1">Step 1. 카카오톡 채널 개설</button></h2>
+                        <div id="step1" class="accordion-collapse collapse" data-bs-parent="#alimtalkGuide">
+                            <div class="accordion-body small">
+                                <ol>
+                                    <li><a href="https://center-pf.kakao.com" target="_blank">카카오톡 채널 관리자센터</a> 접속 → 카카오 계정 로그인</li>
+                                    <li><strong>새 채널 만들기</strong> → 채널명, 프로필 이미지, 소개 입력</li>
+                                    <li>채널 개설 완료 후 <strong>비즈니스 채널 전환</strong> 신청
+                                        <ul>
+                                            <li>사업자등록증 사본 제출 필요</li>
+                                            <li>심사 기간: 약 1~3 영업일</li>
+                                        </ul>
+                                    </li>
+                                    <li>비즈니스 채널 승인 완료 확인</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button collapsed small fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#step2">Step 2. 와이드샷(세종텔레콤) 알림톡 연동 신청</button></h2>
+                        <div id="step2" class="accordion-collapse collapse" data-bs-parent="#alimtalkGuide">
+                            <div class="accordion-body small">
+                                <ol>
+                                    <li>세종네트웍스 담당자에게 <strong>알림톡 사용 신청</strong> 연락
+                                        <ul><li>필요 서류: 사업자등록증, 카카오톡 채널 URL</li></ul>
+                                    </li>
+                                    <li>세종 측에서 카카오 비즈메시지 허브파트너 계정 연동 처리</li>
+                                    <li>연동 완료 시 <strong>senderKey</strong> (발신 프로필 키, 40자) 발급
+                                        <ul>
+                                            <li>이 키를 서버 환경변수 <code>SEJONG_SENDER_KEY</code>에 설정</li>
+                                            <li>또는 관리자에게 전달하여 사용자별 설정</li>
+                                        </ul>
+                                    </li>
+                                </ol>
+                                <div class="alert alert-info mb-0 mt-2">
+                                    <strong>senderKey 예시:</strong> <code>abcd1234abcd1234abcd1234abcd1234abcd1234</code> (40자 영숫자)
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button collapsed small fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#step3">Step 3. 알림톡 템플릿 등록 & 승인</button></h2>
+                        <div id="step3" class="accordion-collapse collapse" data-bs-parent="#alimtalkGuide">
+                            <div class="accordion-body small">
+                                <ol>
+                                    <li><a href="https://center-pf.kakao.com" target="_blank">카카오톡 채널 관리자센터</a> → 비즈메시지 → 알림톡 템플릿 관리</li>
+                                    <li><strong>새 템플릿 등록</strong>
+                                        <ul>
+                                            <li><strong>템플릿 코드:</strong> 자동 발급 (예: <code>SJB_102055</code>)</li>
+                                            <li><strong>메시지 유형:</strong> 기본형(BA) / 부가정보형(EX) / 채널추가형(AD) / 복합형(MI)</li>
+                                            <li><strong>내용:</strong> 변수는 <code>#{변수명}</code> 형식 (예: <code>#{고객명}님 주문이 완료되었습니다.</code>)</li>
+                                            <li><strong>버튼:</strong> 웹링크(WL), 앱링크(AL), 배송조회(DS), 채널추가(AC) 등</li>
+                                            <li><strong>글자수:</strong> 기본형 최대 1,000자 (변수 포함)</li>
+                                        </ul>
+                                    </li>
+                                    <li>카카오 검수 신청 → 심사 기간: <strong>약 1~2 영업일</strong>
+                                        <ul>
+                                            <li>반려 사유: 광고성 문구, 변수 위치 부적절, 맞춤법 오류 등</li>
+                                            <li>반려 시 수정 후 재신청 가능</li>
+                                        </ul>
+                                    </li>
+                                    <li>승인 완료 → <strong>templateCode</strong> 확정</li>
+                                </ol>
+                                <div class="alert alert-danger mb-0 mt-2">
+                                    <i class="bi bi-exclamation-circle"></i>
+                                    <strong>주의:</strong> 발송 시 메시지 내용이 승인된 템플릿과 정확히 일치해야 합니다. 변수 부분만 다를 수 있으며, 그 외 텍스트가 다르면 <code>3016</code> 에러 발생.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button collapsed small fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#step4">Step 4. 발송 테스트 & 운영</button></h2>
+                        <div id="step4" class="accordion-collapse collapse" data-bs-parent="#alimtalkGuide">
+                            <div class="accordion-body small">
+                                <ol>
+                                    <li>서버 환경변수 설정:
+                                        <pre class="bg-dark text-light p-2 rounded small mb-2">SEJONG_SENDER_KEY=발급받은senderKey(40자)
+SEJONG_TEMPLATE_CODE=승인된templateCode</pre>
+                                    </li>
+                                    <li>TalkPC 클라이언트에서 발송 방법 → <strong>"알림톡 (세종)"</strong> 선택</li>
+                                    <li>메시지 내용을 <strong>승인된 템플릿과 동일하게</strong> 작성 (변수만 실제 값으로 대체)</li>
+                                    <li>발송 테스트 → 결과 확인</li>
+                                </ol>
+                                <div class="alert alert-info mb-0">
+                                    <strong>알림톡 실패 시 대체발송:</strong> SMS 또는 LMS로 자동 재발송 가능 (resendType 설정).
+                                    대체발송 시 별도 과금됩니다.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- RCS 가입 가이드 -->
+    <div class="col-12">
+        <div class="card stat-card">
+            <div class="card-body">
+                <h5 class="fw-bold mb-3"><i class="bi bi-phone"></i> RCS 사용 가이드</h5>
+                <div class="alert alert-warning small mb-3">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    RCS는 <strong>RCS 비즈센터 가입 → 브랜드 등록 → 챗봇(발신번호) 등록 → 세종텔레콤 연동</strong> 절차가 필요합니다.
+                    전체 소요 기간: <strong>약 5~10 영업일</strong>
+                </div>
+                <div class="accordion" id="rcsGuide">
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button collapsed small fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#rcs1">Step 1. RCS 비즈센터 가입 & 브랜드 등록</button></h2>
+                        <div id="rcs1" class="accordion-collapse collapse" data-bs-parent="#rcsGuide">
+                            <div class="accordion-body small">
+                                <ol>
+                                    <li><a href="https://www.rcsbizcenter.com" target="_blank">RCS 비즈센터</a> 접속 → 회원가입 (사업자 정보 필요)</li>
+                                    <li><strong>브랜드 등록</strong> 신청
+                                        <ul>
+                                            <li>사업자등록증, 브랜드명, 로고 이미지 등 제출</li>
+                                            <li>심사 기간: 약 2~5 영업일</li>
+                                        </ul>
+                                    </li>
+                                    <li>브랜드 승인 완료 → <strong>brand_key</strong> 발급</li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button collapsed small fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#rcs2">Step 2. 챗봇(발신번호) 등록</button></h2>
+                        <div id="rcs2" class="accordion-collapse collapse" data-bs-parent="#rcsGuide">
+                            <div class="accordion-body small">
+                                <ol>
+                                    <li>RCS 비즈센터 → 챗봇 관리 → <strong>새 챗봇 등록</strong></li>
+                                    <li>발신번호 입력 (사전 등록된 번호만 가능)</li>
+                                    <li>챗봇 승인 완료 → <strong>chatbotId</strong> = 등록된 발신번호</li>
+                                </ol>
+                                <div class="alert alert-info mb-0 mt-2">
+                                    RCS의 <code>chatbotId</code>는 등록된 발신번호입니다. 예: <code>01097804669</code>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button collapsed small fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#rcs3">Step 3. 세종텔레콤 RCS 연동</button></h2>
+                        <div id="rcs3" class="accordion-collapse collapse" data-bs-parent="#rcsGuide">
+                            <div class="accordion-body small">
+                                <ol>
+                                    <li>세종네트웍스 담당자에게 <strong>RCS 사용 신청</strong></li>
+                                    <li>RCS 비즈센터에서 세종텔레콤을 <strong>대행사로 등록</strong></li>
+                                    <li>세종 측에서 RCS 발송 기능 활성화</li>
+                                    <li>서버 환경변수 설정:
+                                        <pre class="bg-dark text-light p-2 rounded small mb-0">WIDESHOT_CHATBOT_ID=등록된발신번호</pre>
+                                    </li>
+                                </ol>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="accordion-item">
+                        <h2 class="accordion-header"><button class="accordion-button collapsed small fw-bold" type="button" data-bs-toggle="collapse" data-bs-target="#rcs4">Step 4. RCS 메시지 유형</button></h2>
+                        <div id="rcs4" class="accordion-collapse collapse" data-bs-parent="#rcsGuide">
+                            <div class="accordion-body small">
+                                <table class="table table-sm table-bordered mb-2">
+                                    <thead class="table-light"><tr><th>유형</th><th>코드</th><th>텍스트</th><th>버튼</th><th>이미지</th></tr></thead>
+                                    <tbody>
+                                        <tr><td>SMS</td><td><code>SS000000</code></td><td>100자</td><td>1개</td><td>X</td></tr>
+                                        <tr><td>LMS</td><td><code>SL000000</code></td><td>1300자</td><td>3개</td><td>X</td></tr>
+                                        <tr><td>MMS Standalone</td><td><code>SMwThT00</code></td><td>1300자</td><td>2개</td><td>O (568x528)</td></tr>
+                                        <tr><td>MMS Carousel</td><td><code>CMwMhM0300</code></td><td>카드당 60자</td><td>카드당 2개</td><td>O (696x504)</td></tr>
+                                    </tbody>
+                                </table>
+                                <div class="alert alert-info mb-0">
+                                    RCS 미지원 단말(피처폰, 아이폰 등)은 자동으로 SMS/LMS 대체발송됩니다.
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
             </div>
         </div>
     </div>
@@ -148,12 +348,18 @@
 
 {% block scripts %}
 <script>
+    function toggleDefaultTimeInputs() {
+        const disabled = document.getElementById('default_time_disabled').checked;
+        document.getElementById('default_time_start_col').style.display = disabled ? 'none' : 'block';
+        document.getElementById('default_time_end_col').style.display = disabled ? 'none' : 'block';
+    }
+
     async function loadSettings() {
         const data = await api('/admin/settings');
         if (!data) return;
 
         const fields = ['cost_sms', 'cost_lms', 'cost_alimtalk',
-                         'cost_rcs_sms', 'cost_rcs_lms', 'cost_rcs_mms',
+                         'cost_rcs_sms', 'cost_rcs_lms', 'cost_rcs_mms', 'cost_brandtalk',
                          'default_daily_limit', 'default_hourly_limit',
                          'default_send_start_hour', 'default_send_end_hour',
                          'bank_account'];
@@ -161,6 +367,13 @@
             const el = document.getElementById(key);
             if (el && data[key]) el.value = data[key].value;
         });
+
+        // 시간 제한 사용 안함 체크
+        const startVal = data['default_send_start_hour'] ? data['default_send_start_hour'].value : '8';
+        const endVal = data['default_send_end_hour'] ? data['default_send_end_hour'].value : '21';
+        const isDisabled = (startVal === '0' && endVal === '0');
+        document.getElementById('default_time_disabled').checked = isDisabled;
+        toggleDefaultTimeInputs();
     }
 
     async function savePricing() {
@@ -171,17 +384,19 @@
             cost_rcs_sms: document.getElementById('cost_rcs_sms').value,
             cost_rcs_lms: document.getElementById('cost_rcs_lms').value,
             cost_rcs_mms: document.getElementById('cost_rcs_mms').value,
+            cost_brandtalk: document.getElementById('cost_brandtalk').value,
         };
         const r = await api('/admin/settings', {method: 'PUT', body: JSON.stringify({settings})});
         if (r) alert(r.message);
     }
 
     async function saveLimits() {
+        const disabled = document.getElementById('default_time_disabled').checked;
         const settings = {
             default_hourly_limit: document.getElementById('default_hourly_limit').value,
             default_daily_limit: document.getElementById('default_daily_limit').value,
-            default_send_start_hour: document.getElementById('default_send_start_hour').value,
-            default_send_end_hour: document.getElementById('default_send_end_hour').value,
+            default_send_start_hour: disabled ? '0' : document.getElementById('default_send_start_hour').value,
+            default_send_end_hour: disabled ? '0' : document.getElementById('default_send_end_hour').value,
         };
         const r = await api('/admin/settings', {method: 'PUT', body: JSON.stringify({settings})});
         if (r) alert(r.message);

@@ -66,13 +66,19 @@
         <div class="card stat-card h-100">
             <div class="card-body">
                 <h6 class="fw-bold mb-3"><i class="bi bi-clock"></i> 발송 시간 / 역할</h6>
-                <div class="mb-2">
-                    <label class="form-label form-label-sm mb-1">발송 시작 시간</label>
-                    <input type="number" class="form-control form-control-sm" id="editStartHour" min="0" max="23" placeholder="8">
+                <div class="form-check form-switch mb-2">
+                    <input class="form-check-input" type="checkbox" id="timeDisabled" onchange="toggleTimeInputs()">
+                    <label class="form-check-label small" for="timeDisabled">시간 제한 사용 안함</label>
                 </div>
-                <div class="mb-2">
-                    <label class="form-label form-label-sm mb-1">발송 종료 시간</label>
-                    <input type="number" class="form-control form-control-sm" id="editEndHour" min="0" max="23" placeholder="21">
+                <div id="timeInputs">
+                    <div class="mb-2">
+                        <label class="form-label form-label-sm mb-1">발송 시작 시간</label>
+                        <input type="number" class="form-control form-control-sm" id="editStartHour" min="0" max="23" placeholder="8">
+                    </div>
+                    <div class="mb-2">
+                        <label class="form-label form-label-sm mb-1">발송 종료 시간</label>
+                        <input type="number" class="form-control form-control-sm" id="editEndHour" min="0" max="23" placeholder="21">
+                    </div>
                 </div>
                 <div class="row g-2">
                     <div class="col-6">
@@ -129,6 +135,30 @@
                     </table>
                 </div>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- 발신번호 관리 -->
+<div class="card stat-card mb-4">
+    <div class="card-body">
+        <h6 class="fw-bold mb-3"><i class="bi bi-telephone"></i> 발신번호 관리</h6>
+        <div class="row g-2 mb-3">
+            <div class="col-md-4">
+                <input type="text" class="form-control form-control-sm" id="cbPhone" placeholder="발신번호 (예: 01012345678)">
+            </div>
+            <div class="col-md-4">
+                <input type="text" class="form-control form-control-sm" id="cbMemo" placeholder="메모 (선택)">
+            </div>
+            <div class="col-md-2">
+                <button class="btn btn-sm btn-primary w-100" onclick="addCallback()"><i class="bi bi-plus-lg"></i> 추가</button>
+            </div>
+        </div>
+        <div class="table-responsive" style="max-height:250px;overflow-y:auto">
+            <table class="table table-sm table-hover mb-0">
+                <thead><tr><th>발신번호</th><th>메모</th><th>상태</th><th>등록일</th><th>관리</th></tr></thead>
+                <tbody id="callbackTable"></tbody>
+            </table>
         </div>
     </div>
 </div>
@@ -192,8 +222,11 @@
         // 한도 설정 폼
         document.getElementById('editHourlyLimit').value = u.hourly_limit || 200;
         document.getElementById('editDailyLimit').value = u.daily_limit || 1000;
-        document.getElementById('editStartHour').value = u.send_start_hour ?? 8;
-        document.getElementById('editEndHour').value = u.send_end_hour ?? 21;
+        const isDisabled = (u.send_start_hour === 0 && u.send_end_hour === 0);
+        document.getElementById('timeDisabled').checked = isDisabled;
+        document.getElementById('timeInputs').style.display = isDisabled ? 'none' : 'block';
+        document.getElementById('editStartHour').value = isDisabled ? 8 : (u.send_start_hour ?? 8);
+        document.getElementById('editEndHour').value = isDisabled ? 21 : (u.send_end_hour ?? 21);
 
         // 잠금 상태
         if (u.is_locked) {
@@ -246,6 +279,24 @@
             </tr>
         `).join('') || '<tr><td colspan="5" class="text-center text-muted">등록된 기기 없음</td></tr>';
 
+        // 발신번호
+        const cbt = document.getElementById('callbackTable');
+        const callbacks = data.callbacks || [];
+        cbt.innerHTML = callbacks.map(cb => `
+            <tr>
+                <td><code>${cb.phone}</code></td>
+                <td>${cb.memo || '-'}</td>
+                <td>${cb.is_active
+                    ? '<span class="badge bg-success">활성</span>'
+                    : '<span class="badge bg-secondary">비활성</span>'}</td>
+                <td>${formatDate(cb.created_at)}</td>
+                <td>
+                    ${!cb.is_active ? `<button class="btn btn-sm btn-outline-success me-1" onclick="activateCallback(${cb.id})" title="활성화"><i class="bi bi-check-lg"></i></button>` : ''}
+                    <button class="btn btn-sm btn-outline-danger" onclick="deleteCallback(${cb.id})" title="삭제"><i class="bi bi-trash"></i></button>
+                </td>
+            </tr>
+        `).join('') || '<tr><td colspan="5" class="text-center text-muted">등록된 발신번호 없음</td></tr>';
+
         // 보안 로그
         const st = document.getElementById('securityTable');
         const secLogs = data.security_logs || [];
@@ -278,10 +329,16 @@
         if (r) { alert(r.message); load(); }
     }
 
+    function toggleTimeInputs() {
+        const disabled = document.getElementById('timeDisabled').checked;
+        document.getElementById('timeInputs').style.display = disabled ? 'none' : 'block';
+    }
+
     async function updateSettings() {
         const role = document.getElementById('editRole').value;
-        const send_start_hour = parseInt(document.getElementById('editStartHour').value);
-        const send_end_hour = parseInt(document.getElementById('editEndHour').value);
+        const disabled = document.getElementById('timeDisabled').checked;
+        const send_start_hour = disabled ? 0 : parseInt(document.getElementById('editStartHour').value);
+        const send_end_hour = disabled ? 0 : parseInt(document.getElementById('editEndHour').value);
         const r = await api(`/admin/users/${userId}`, {method:'PUT', body: JSON.stringify({role, send_start_hour, send_end_hour})});
         if (r) { alert(r.message); load(); }
     }
@@ -301,6 +358,30 @@
         if (!confirm('이 기기를 삭제하시겠습니까?')) return;
         const r = await api(`/admin/users/${userId}/devices/${deviceId}`, {method:'DELETE'});
         if (r) { alert('기기가 삭제되었습니다.'); load(); }
+    }
+
+    async function addCallback() {
+        const phone = document.getElementById('cbPhone').value.trim();
+        const memo = document.getElementById('cbMemo').value.trim();
+        if (!phone) { alert('발신번호를 입력하세요.'); return; }
+        const r = await api(`/admin/users/${userId}/callbacks`, {method:'POST', body: JSON.stringify({phone, memo})});
+        if (r) {
+            alert(r.message || '발신번호가 추가되었습니다.');
+            document.getElementById('cbPhone').value = '';
+            document.getElementById('cbMemo').value = '';
+            load();
+        }
+    }
+
+    async function activateCallback(cbId) {
+        const r = await api(`/admin/users/${userId}/callbacks/${cbId}/activate`, {method:'PUT'});
+        if (r) { alert(r.message || '활성화되었습니다.'); load(); }
+    }
+
+    async function deleteCallback(cbId) {
+        if (!confirm('이 발신번호를 삭제하시겠습니까?')) return;
+        const r = await api(`/admin/users/${userId}/callbacks/${cbId}`, {method:'DELETE'});
+        if (r) { alert(r.message || '삭제되었습니다.'); load(); }
     }
 
     load();

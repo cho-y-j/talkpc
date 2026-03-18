@@ -16,6 +16,7 @@ class SendLog(Base):
     msg_type: Mapped[str] = mapped_column(String(10), nullable=False)
     message_preview: Mapped[str] = mapped_column(String(100), default="")
     mseq: Mapped[Optional[int]] = mapped_column(Integer, nullable=True)
+    send_code: Mapped[Optional[str]] = mapped_column(String(100), nullable=True)  # Wideshot API sendCode
     status: Mapped[str] = mapped_column(String(20), default="queued")
     cost: Mapped[int] = mapped_column(Integer, default=0)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)

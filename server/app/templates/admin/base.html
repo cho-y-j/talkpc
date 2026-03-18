@@ -88,7 +88,7 @@
         }
         document.getElementById('admin-name') && (document.getElementById('admin-name').textContent = ADMIN_INFO.name || '관리자');
 
-        const API_KEY = 'tpc-k8x2m9vQfR7wLpN3jY6sT0dA4hE1cU5b';
+        const API_KEY = '{{ api_key }}';
 
         async function api(path, opts = {}) {
             const res = await fetch('/api' + path, {
