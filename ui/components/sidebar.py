@@ -71,13 +71,13 @@ class Sidebar(ctk.CTkFrame):
             ("send", "🚀  발송"),
             ("contacts", "👥  연락처"),
             ("message", "✉️  메시지 디자이너"),
-            ("alimtalk_designer", "💛  알림톡 디자이너"),
-            ("brandtalk_designer", "🟡  브랜드톡 디자이너"),
-            ("rcs_designer", "📱  RCS 디자이너"),
         ]
 
-        # SaaS 모드: 사용량/충전 메뉴 추가
+        # SaaS 모드: 디자이너 + 사용량/충전 메뉴
         if self.api_client:
+            menu_items.append(("alimtalk_designer", "💛  알림톡 디자이너"))
+            menu_items.append(("brandtalk_designer", "🟡  브랜드톡 디자이너"))
+            menu_items.append(("rcs_designer", "📱  RCS 디자이너"))
             menu_items.append(("usage", "📈  사용량"))
             menu_items.append(("charge", "💳  충전하기"))
 
